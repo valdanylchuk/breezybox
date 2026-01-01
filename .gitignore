@@ -4,3 +4,4 @@ sdkconfig.old
 .vscode/
 managed_components/
 .DS_Store
+dist
