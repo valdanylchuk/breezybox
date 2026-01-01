@@ -1,0 +1,45 @@
+idf_component_register(
+    SRCS 
+        "breezybox.c"
+        "breezy_vfs.c"
+        "breezy_wrap.c"
+        "breezy_exec.c"
+        "breezy_exports.c"
+        "vterm.c"
+        "cmd/ls.c"
+        "cmd/cat.c"
+        "cmd/mkdir.c"
+        "cmd/wifi.c"
+        "cmd/httpd.c"
+        "cmd/head.c"
+        "cmd/tail.c"
+        "cmd/more.c"
+        "cmd/wc.c"
+        "cmd/cp.c"
+        "cmd/mv.c"
+        "cmd/rm.c"
+        "cmd/df.c"
+        "cmd/du.c"
+        "cmd/date.c"
+        "cmd/eget.c"
+    INCLUDE_DIRS "include"
+    REQUIRES console vfs
+    PRIV_REQUIRES nvs_flash esp_wifi esp_netif esp_http_server esp_http_client json mbedtls
+)
+
+# Propagate linker wrap options to any project using this component
+target_link_options(${COMPONENT_LIB} INTERFACE
+    "-Wl,-wrap,fopen"
+    "-Wl,-wrap,open"
+    "-Wl,-wrap,mkdir"
+    "-Wl,-wrap,rename"
+    "-Wl,-wrap,remove"
+    "-Wl,-wrap,rmdir"
+    "-Wl,-wrap,chdir"
+    "-Wl,-wrap,getcwd"
+    "-Wl,-wrap,opendir"
+    "-Wl,-wrap,readdir"
+    "-Wl,-wrap,closedir"
+    "-Wl,-wrap,rewinddir"
+    "-Wl,-wrap,stat"
+)
