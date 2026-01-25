@@ -22,4 +22,6 @@ dependencies:
   # ELF loader for running downloaded executables
   espressif/elf_loader:
     version: "^1.1"
-
+  # ZLib for gzip/gunzip ELF commands and general use
+  espressif/zlib:
+    version: "^1.3"
