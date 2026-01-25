@@ -1,6 +1,15 @@
 /*
- * vterm.c - Virtual Terminal Manager
- */
+* vterm.c - Virtual Terminal Manager (Zero Copy / Swap Architecture)
+* 
+* Memory Architecture:
+* - s_iram_buffer: 9.5KB buffer in fast Internal RAM. The Display reads this.
+* - cells: Pointer in vterm_t. Points to s_iram_buffer (Active) or storage_cells (Inactive).
+* - storage_cells: PSRAM buffers for inactive VTs.
+* 
+* On Switch:
+* 1. Copy s_iram_buffer -> old_vt->storage_cells (Save state)
+* 2. Copy new_vt->storage_cells -> s_iram_buffer (Load state)
+*/
 
 #include "vterm.h"
 #include "freertos/FreeRTOS.h"
@@ -13,15 +22,33 @@
 
 #define INPUT_QUEUE_SIZE    64
 #define MAX_TASKS           8
+#define BUFFER_SIZE_BYTES   (VTERM_ROWS * VTERM_COLS * sizeof(vterm_cell_t))
+
+// The single "Hot" buffer used by the display and the active writer
+// Must be 32-bit aligned for the optimized renderer
+static vterm_cell_t *s_iram_buffer = NULL;
 
 typedef struct {
-    vterm_cell_t cells[VTERM_ROWS][VTERM_COLS];
+    // If this VT is active, this points to s_iram_buffer.
+    // If inactive, this points to storage_cells.
+    vterm_cell_t *cells;
+
+    // Backing store in PSRAM (holds state when VT is not active)
+    vterm_cell_t *storage_cells;
+
     int cursor_x;
     int cursor_y;
-    uint8_t current_attr;   // Current drawing attribute
+    uint8_t current_attr;  // 4-bit fg + 4-bit bg
+
     QueueHandle_t input_queue;
     SemaphoreHandle_t mutex;
-    int dirty;  // Needs refresh
+
+    // Escape parsing
+    int escape_state;
+    char escape_buf[32];
+    int escape_len;
+
+    int dirty;
 } vterm_t;
 
 static vterm_t *s_vterms = NULL;
@@ -29,508 +56,633 @@ static volatile int s_active_vt = 0;
 static void (*s_on_switch_cb)(int new_vt) = NULL;
 static void (*s_on_render_cb)(int vt_id) = NULL;
 
-// Task-to-VT mapping
-typedef struct {
-    TaskHandle_t task;
-    int vt_id;
-} task_map_entry_t;
-
+// Task mapping
+typedef struct { TaskHandle_t task; int vt_id; } task_map_entry_t;
 static task_map_entry_t s_task_map[MAX_TASKS];
 static SemaphoreHandle_t s_task_map_mutex;
 
+// Forward declarations
+static void vterm_clear_internal(vterm_t *vt);
+void vterm_send_input(int vt_id, char c);
+
 // ============ Internal Functions ============
 
+// Scroll the entire screen up by 1 line
 static void vterm_scroll(vterm_t *vt)
 {
-    // Move all lines up by one
-    memmove(&vt->cells[0][0], &vt->cells[1][0], 
-            (VTERM_ROWS - 1) * VTERM_COLS * sizeof(vterm_cell_t));
+    // Move lines 1..N-1 to 0..N-2
+    // Calculate size of (ROWS - 1) lines
+    size_t block_size = (VTERM_ROWS - 1) * VTERM_COLS * sizeof(vterm_cell_t);
+    
+    // memmove is safe for overlapping regions
+    memmove(&vt->cells[0], &vt->cells[VTERM_COLS], block_size);
+    
     // Clear last line
+    vterm_cell_t *last_line = &vt->cells[(VTERM_ROWS - 1) * VTERM_COLS];
     for (int x = 0; x < VTERM_COLS; x++) {
-        vt->cells[VTERM_ROWS - 1][x].ch = ' ';
-        vt->cells[VTERM_ROWS - 1][x].attr = VTERM_DEFAULT_ATTR;
+        last_line[x].ch = ' ';
+        last_line[x].attr = VTERM_DEFAULT_ATTR;
     }
     vt->cursor_y = VTERM_ROWS - 1;
 }
 
 static void vterm_putchar_internal(vterm_t *vt, char c)
 {
+    // Direct pointer access for speed
+    vterm_cell_t *cell = &vt->cells[vt->cursor_y * VTERM_COLS + vt->cursor_x];
+
     switch (c) {
     case '\n':
         vt->cursor_x = 0;
         vt->cursor_y++;
-        if (vt->cursor_y >= VTERM_ROWS) {
-            vterm_scroll(vt);
-        }
+        if (vt->cursor_y >= VTERM_ROWS) vterm_scroll(vt);
         break;
-        
     case '\r':
         vt->cursor_x = 0;
         break;
-        
     case '\b':
         if (vt->cursor_x > 0) {
             vt->cursor_x--;
-            vt->cells[vt->cursor_y][vt->cursor_x].ch = ' ';
-            vt->cells[vt->cursor_y][vt->cursor_x].attr = vt->current_attr;
+            // Backspace erases visually
+            cell--; // Move pointer back
+            cell->ch = ' ';
+            cell->attr = vt->current_attr;
         }
         break;
-        
     case '\t':
-        // Tab to next 8-column boundary
         do {
-            vt->cells[vt->cursor_y][vt->cursor_x].ch = ' ';
-            vt->cells[vt->cursor_y][vt->cursor_x].attr = vt->current_attr;
+            cell->ch = ' ';
+            cell->attr = vt->current_attr;
+            cell++;
             vt->cursor_x++;
         } while (vt->cursor_x < VTERM_COLS && (vt->cursor_x % 8) != 0);
         if (vt->cursor_x >= VTERM_COLS) {
             vt->cursor_x = 0;
             vt->cursor_y++;
-            if (vt->cursor_y >= VTERM_ROWS) {
-                vterm_scroll(vt);
-            }
+            if (vt->cursor_y >= VTERM_ROWS) vterm_scroll(vt);
         }
         break;
-        
     default:
         if (c >= 32 && c < 127) {
-            vt->cells[vt->cursor_y][vt->cursor_x].ch = c;
-            vt->cells[vt->cursor_y][vt->cursor_x].attr = vt->current_attr;
+            cell->ch = c;
+            cell->attr = vt->current_attr;
             vt->cursor_x++;
             if (vt->cursor_x >= VTERM_COLS) {
                 vt->cursor_x = 0;
                 vt->cursor_y++;
-                if (vt->cursor_y >= VTERM_ROWS) {
-                    vterm_scroll(vt);
-                }
+                if (vt->cursor_y >= VTERM_ROWS) vterm_scroll(vt);
             }
         }
         break;
     }
-    
-    vt->dirty = 1;
 }
 
 static void vterm_clear_internal(vterm_t *vt)
 {
-    for (int y = 0; y < VTERM_ROWS; y++) {
-        for (int x = 0; x < VTERM_COLS; x++) {
-            vt->cells[y][x].ch = ' ';
-            vt->cells[y][x].attr = VTERM_DEFAULT_ATTR;
-        }
+    vterm_cell_t *p = vt->cells;
+    vterm_cell_t *end = p + (VTERM_ROWS * VTERM_COLS);
+
+    // Fill optimization: Construct a 32-bit pattern of two cells
+    uint16_t fill = (VTERM_DEFAULT_ATTR << 8) | ' ';
+    uint32_t fill32 = (fill << 16) | fill;
+
+    // Align to 32-bit
+    while ((uintptr_t)p & 3 && p < end) {
+        p->ch = ' '; p->attr = VTERM_DEFAULT_ATTR; p++;
     }
+    uint32_t *p32 = (uint32_t *)p;
+    while (p32 < (uint32_t *)end) {
+        *p32++ = fill32;
+    }
+    // Handle remaining
+    p = (vterm_cell_t *)p32;
+    while (p < end) {
+        p->ch = ' '; p->attr = VTERM_DEFAULT_ATTR; p++;
+    }
+
     vt->cursor_x = 0;
     vt->cursor_y = 0;
     vt->current_attr = VTERM_DEFAULT_ATTR;
-    vt->dirty = 1;
 }
 
-// Handle ANSI escape sequences
-// Supports: cursor movement, clear screen, and SGR (colors)
-static int s_escape_state = 0;  // 0=normal, 1=got ESC, 2=got ESC[
-static char s_escape_buf[32];
-static int s_escape_len = 0;
+// Helper to parse a number from SGR params, advancing pointer
+static int sgr_parse_num(const char **pp)
+{
+    int num = 0;
+    while (**pp >= '0' && **pp <= '9') {
+        num = num * 10 + (**pp - '0');
+        (*pp)++;
+    }
+    if (**pp == ';') (*pp)++;
+    return num;
+}
 
-// Parse SGR (Select Graphic Rendition) parameters and update current_attr
 static void vterm_apply_sgr(vterm_t *vt, const char *params)
 {
-    // Parse semicolon-separated numbers
-    // Empty or "0" = reset, 1 = bold, 30-37 = fg, 40-47 = bg, 90-97 = bright fg, 100-107 = bright bg
-    
     const char *p = params;
     int bright = 0;
-    
-    // Handle empty params (ESC[m) as reset
+
+    // Handle empty or "0" reset
     if (*p == '\0' || (*p == '0' && (p[1] == '\0' || p[1] == ';'))) {
         vt->current_attr = VTERM_DEFAULT_ATTR;
         if (*p == '0') p++;
         if (*p == ';') p++;
     }
-    
+
     while (*p) {
-        // Parse number
-        int num = 0;
-        while (*p >= '0' && *p <= '9') {
-            num = num * 10 + (*p - '0');
-            p++;
+        int num = sgr_parse_num(&p);
+
+        // --- OPTIMIZATION: Check most common codes (Colors) first ---
+        
+        if (num >= 90 && num <= 97) {
+            // Bright foreground colors (8-15)
+            uint8_t fg = (num - 90) | VTERM_BRIGHT;
+            uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
+            vt->current_attr = VTERM_ATTR(fg, bg);
+        } 
+        else if (num >= 30 && num <= 37) {
+            // Standard foreground colors (0-7)
+            uint8_t fg = (num - 30) | bright;
+            uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
+            vt->current_attr = VTERM_ATTR(fg, bg);
         }
-        
-        // Skip semicolon
-        if (*p == ';') p++;
-        
-        // Apply the SGR code
-        if (num == 0) {
-            // Reset
+        else if (num == 0) {
             vt->current_attr = VTERM_DEFAULT_ATTR;
             bright = 0;
-        } else if (num == 1) {
-            // Bold/bright - apply to foreground
+        } 
+        // --- End Optimization ---
+        
+        else if (num == 1) {
             bright = VTERM_BRIGHT;
             uint8_t fg = VTERM_ATTR_FG(vt->current_attr);
             uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
             vt->current_attr = VTERM_ATTR(fg | VTERM_BRIGHT, bg);
         } else if (num == 22) {
-            // Normal intensity (not bold)
             bright = 0;
             uint8_t fg = VTERM_ATTR_FG(vt->current_attr) & 0x07;
             uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
             vt->current_attr = VTERM_ATTR(fg, bg);
-        } else if (num >= 30 && num <= 37) {
-            // Foreground color
-            uint8_t fg = (num - 30) | bright;
-            uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
-            vt->current_attr = VTERM_ATTR(fg, bg);
+        } else if (num == 38) {
+            // Extended foreground: 38;5;N (256-color) or 38;2;R;G;B (truecolor)
+            // Gracefully skip - we only support 16-color mode
+            int mode = sgr_parse_num(&p);
+            if (mode == 5) {
+                sgr_parse_num(&p);  // Skip color index
+            } else if (mode == 2) {
+                sgr_parse_num(&p); sgr_parse_num(&p); sgr_parse_num(&p);  // Skip R, G, B
+            }
         } else if (num == 39) {
             // Default foreground
             uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
             vt->current_attr = VTERM_ATTR(VTERM_WHITE, bg);
         } else if (num >= 40 && num <= 47) {
-            // Background color
+            // Standard background colors (0-7)
             uint8_t fg = VTERM_ATTR_FG(vt->current_attr);
             uint8_t bg = num - 40;
             vt->current_attr = VTERM_ATTR(fg, bg);
+        } else if (num == 48) {
+            // Extended background: 48;5;N (256-color) or 48;2;R;G;B (truecolor)
+            // Gracefully skip - we only support 16-color mode
+            int mode = sgr_parse_num(&p);
+            if (mode == 5) {
+                sgr_parse_num(&p);  // Skip color index
+            } else if (mode == 2) {
+                sgr_parse_num(&p); sgr_parse_num(&p); sgr_parse_num(&p);  // Skip R, G, B
+            }
         } else if (num == 49) {
             // Default background
             uint8_t fg = VTERM_ATTR_FG(vt->current_attr);
             vt->current_attr = VTERM_ATTR(fg, VTERM_BLACK);
-        } else if (num >= 90 && num <= 97) {
-            // Bright foreground
-            uint8_t fg = (num - 90) | VTERM_BRIGHT;
-            uint8_t bg = VTERM_ATTR_BG(vt->current_attr);
-            vt->current_attr = VTERM_ATTR(fg, bg);
         } else if (num >= 100 && num <= 107) {
-            // Bright background
+            // Bright background colors (8-15)
             uint8_t fg = VTERM_ATTR_FG(vt->current_attr);
             uint8_t bg = (num - 100) | VTERM_BRIGHT;
             vt->current_attr = VTERM_ATTR(fg, bg);
         }
-        // Ignore other SGR codes (italic, underline, etc.)
     }
 }
 
 static int vterm_handle_escape(vterm_t *vt, char c)
 {
-    if (s_escape_state == 0) {
+    if (vt->escape_state == 0) {
         if (c == '\033') {
-            s_escape_state = 1;
-            s_escape_len = 0;
-            return 1;  // Consumed
-        }
-        return 0;  // Not an escape
-    }
-    
-    if (s_escape_state == 1) {
-        if (c == '[') {
-            s_escape_state = 2;
+            vt->escape_state = 1;
+            vt->escape_len = 0;
             return 1;
         }
-        // Unknown escape, reset
-        s_escape_state = 0;
         return 0;
     }
-    
-    // s_escape_state == 2: collecting CSI parameters
-    if (s_escape_len < (int)sizeof(s_escape_buf) - 1) {
-        s_escape_buf[s_escape_len++] = c;
-        s_escape_buf[s_escape_len] = '\0';
+
+    if (vt->escape_state == 1) {
+        if (c == '[') {
+            vt->escape_state = 2;
+            return 1;
+        }
+        // Non-CSI escape sequences: ESC <letter>
+        if (c == 'D') {
+            // IND - Index: move cursor down, scroll if at bottom
+            if (vt->cursor_y >= VTERM_ROWS - 1) {
+                vterm_scroll(vt);
+            } else {
+                vt->cursor_y++;
+            }
+            vt->dirty = 1;
+            vt->escape_state = 0;
+            return 1;
+        }
+        if (c == 'M') {
+            // RI - Reverse Index: move cursor up, scroll down if at top
+            if (vt->cursor_y <= 0) {
+                // Scroll down: move lines 0..N-2 to 1..N-1
+                memmove(&vt->cells[VTERM_COLS], &vt->cells[0],
+                        (VTERM_ROWS - 1) * VTERM_COLS * sizeof(vterm_cell_t));
+                
+                // Clear top line
+                vterm_cell_t *top_row = &vt->cells[0];
+                for (int x = 0; x < VTERM_COLS; x++) {
+                    top_row[x].ch = ' ';
+                    top_row[x].attr = VTERM_DEFAULT_ATTR;
+                }
+            } else {
+                vt->cursor_y--;
+            }
+            vt->dirty = 1;
+            vt->escape_state = 0;
+            return 1;
+        }
+        if (c == 'E') {
+            // NEL - Next Line: move to column 1 of next line, scroll if needed
+            vt->cursor_x = 0;
+            if (vt->cursor_y >= VTERM_ROWS - 1) {
+                vterm_scroll(vt);
+            } else {
+                vt->cursor_y++;
+            }
+            vt->dirty = 1;
+            vt->escape_state = 0;
+            return 1;
+        }
+        vt->escape_state = 0;
+        return 0;
     }
-    
-    // Check for final character (letter)
+
+    if (vt->escape_len < (int)sizeof(vt->escape_buf) - 1) {
+        vt->escape_buf[vt->escape_len++] = c;
+        vt->escape_buf[vt->escape_len] = '\0';
+    }
+
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-        // Remove the final character from params for parsing
-        s_escape_buf[s_escape_len - 1] = '\0';
-        
+        vt->escape_buf[vt->escape_len - 1] = '\0';
+
+        // DEC private mode sequences (ESC [ ? ...) - gracefully ignore
+        if (vt->escape_buf[0] == '?') {
+            vt->escape_state = 0;
+            vt->escape_len = 0;
+            return 1;
+        }
+
         switch (c) {
-        case 'm':
-            // SGR - Select Graphic Rendition (colors)
-            vterm_apply_sgr(vt, s_escape_buf);
-            break;
-            
+        case 'm': vterm_apply_sgr(vt, vt->escape_buf); break;
         case 'J':
-            // Erase in Display
-            if (strcmp(s_escape_buf, "2") == 0 || strcmp(s_escape_buf, "") == 0) {
+            if (strcmp(vt->escape_buf, "2") == 0 || strcmp(vt->escape_buf, "") == 0) {
                 vterm_clear_internal(vt);
             }
             break;
-            
         case 'H':
         case 'f':
-            // Cursor Position
-            if (s_escape_buf[0] == '\0' || strcmp(s_escape_buf, "1;1") == 0) {
+            if (vt->escape_buf[0] == '\0' || strcmp(vt->escape_buf, "1;1") == 0) {
                 vt->cursor_x = 0;
                 vt->cursor_y = 0;
             } else {
-                // Parse row;col
                 int row = 1, col = 1;
-                sscanf(s_escape_buf, "%d;%d", &row, &col);
+                sscanf(vt->escape_buf, "%d;%d", &row, &col);
                 vt->cursor_y = (row > 0 ? row - 1 : 0);
                 vt->cursor_x = (col > 0 ? col - 1 : 0);
                 if (vt->cursor_y >= VTERM_ROWS) vt->cursor_y = VTERM_ROWS - 1;
                 if (vt->cursor_x >= VTERM_COLS) vt->cursor_x = VTERM_COLS - 1;
             }
             break;
-            
-        case 'A':
-            // Cursor Up
-            {
-                int n = 1;
-                if (s_escape_buf[0]) n = atoi(s_escape_buf);
-                if (n < 1) n = 1;
-                vt->cursor_y -= n;
-                if (vt->cursor_y < 0) vt->cursor_y = 0;
-            }
-            break;
-            
-        case 'B':
-            // Cursor Down
-            {
-                int n = 1;
-                if (s_escape_buf[0]) n = atoi(s_escape_buf);
-                if (n < 1) n = 1;
-                vt->cursor_y += n;
-                if (vt->cursor_y >= VTERM_ROWS) vt->cursor_y = VTERM_ROWS - 1;
-            }
-            break;
-            
-        case 'C':
-            // Cursor Forward
-            {
-                int n = 1;
-                if (s_escape_buf[0]) n = atoi(s_escape_buf);
-                if (n < 1) n = 1;
-                vt->cursor_x += n;
-                if (vt->cursor_x >= VTERM_COLS) vt->cursor_x = VTERM_COLS - 1;
-            }
-            break;
-            
-        case 'D':
-            // Cursor Back
-            {
-                int n = 1;
-                if (s_escape_buf[0]) n = atoi(s_escape_buf);
-                if (n < 1) n = 1;
-                vt->cursor_x -= n;
-                if (vt->cursor_x < 0) vt->cursor_x = 0;
-            }
-            break;
-            
-        case 'K':
-            // Erase in Line
-            {
-                int mode = 0;
-                if (s_escape_buf[0]) mode = atoi(s_escape_buf);
-                int start = 0, end = VTERM_COLS;
-                if (mode == 0) {
-                    // Cursor to end
-                    start = vt->cursor_x;
-                } else if (mode == 1) {
-                    // Start to cursor
-                    end = vt->cursor_x + 1;
-                }
-                // mode == 2: entire line (start=0, end=COLS)
-                for (int x = start; x < end; x++) {
-                    vt->cells[vt->cursor_y][x].ch = ' ';
-                    vt->cells[vt->cursor_y][x].attr = vt->current_attr;
-                }
-            }
-            break;
-
-        case 'n':
-            // Device Status Report / Cursor Position Report
-            // Request: ESC [ 6 n
-            // Response: ESC [ <r> ; <c> R
-            if (s_escape_buf[0] == '6' && s_escape_buf[1] == '\0') {
-                char resp[32];
-                // VT coordinates are 1-based
-                snprintf(resp, sizeof(resp), "\x1b[%d;%dR", vt->cursor_y + 1, vt->cursor_x + 1);
-                
-                // Inject response directly into input queue
-                for (int i = 0; resp[i] != '\0'; i++) {
-                    vterm_send_input(s_active_vt, resp[i]); // Or pass specific vt ID if context allows
-                }
-            }
-            // Linenoise Probe sends ESC [ 5 n, expects ESC [ 0 n
-            else if (s_escape_buf[0] == '5' && s_escape_buf[1] == '\0') {
-                const char *resp = "\x1b[0n";
-                for (int i = 0; resp[i] != '\0'; i++) {
-                    vterm_send_input(s_active_vt, resp[i]);
-                }
-            }
-            break;
-            
-        default:
-            // Unknown CSI sequence, ignore
+        case 'A': { // Cursor Up
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            vt->cursor_y -= n;
+            if (vt->cursor_y < 0) vt->cursor_y = 0;
             break;
         }
-        
-        s_escape_state = 0;
-        s_escape_len = 0;
+        case 'B': { // Cursor Down
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            vt->cursor_y += n;
+            if (vt->cursor_y >= VTERM_ROWS) vt->cursor_y = VTERM_ROWS - 1;
+            break;
+        }
+        case 'C': { // Cursor Right
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            vt->cursor_x += n;
+            if (vt->cursor_x >= VTERM_COLS) vt->cursor_x = VTERM_COLS - 1;
+            break;
+        }
+        case 'D': { // Cursor Left
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            vt->cursor_x -= n;
+            if (vt->cursor_x < 0) vt->cursor_x = 0;
+            break;
+        }
+        case 'K': { // Erase in Line
+            int mode = 0;
+            if (vt->escape_buf[0]) mode = atoi(vt->escape_buf);
+            int start = 0, end = VTERM_COLS;
+            if (mode == 0) start = vt->cursor_x; // Cursor to end
+            else if (mode == 1) end = vt->cursor_x + 1; // Start to cursor
+            
+            // Get pointer to current row
+            vterm_cell_t *row = &vt->cells[vt->cursor_y * VTERM_COLS];
+            for (int x = start; x < end; x++) {
+                row[x].ch = ' ';
+                row[x].attr = vt->current_attr;
+            }
+            break;
+        }
+        case 'X': { // Erase N Chars
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            int end = vt->cursor_x + n;
+            if (end > VTERM_COLS) end = VTERM_COLS;
+
+            vterm_cell_t *row = &vt->cells[vt->cursor_y * VTERM_COLS];
+            for (int x = vt->cursor_x; x < end; x++) {
+                row[x].ch = ' ';
+                row[x].attr = vt->current_attr;
+            }
+            break;
+        }
+        case 'L': {
+            // IL - Insert Lines: insert N blank lines at cursor row, scroll down
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            if (n > VTERM_ROWS - vt->cursor_y) n = VTERM_ROWS - vt->cursor_y;
+
+            // Move lines down
+            int lines_to_move = VTERM_ROWS - vt->cursor_y - n;
+            if (lines_to_move > 0) {
+                memmove(&vt->cells[(vt->cursor_y + n) * VTERM_COLS],
+                        &vt->cells[vt->cursor_y * VTERM_COLS],
+                        lines_to_move * VTERM_COLS * sizeof(vterm_cell_t));
+            }
+
+            // Clear inserted lines
+            for (int y = vt->cursor_y; y < vt->cursor_y + n; y++) {
+                vterm_cell_t *row = &vt->cells[y * VTERM_COLS];
+                for (int x = 0; x < VTERM_COLS; x++) {
+                    row[x].ch = ' ';
+                    row[x].attr = VTERM_DEFAULT_ATTR;
+                }
+            }
+            break;
+        }
+        case 'M': {
+            // DL - Delete Lines: delete N lines at cursor row, scroll up
+            int n = 1;
+            if (vt->escape_buf[0]) n = atoi(vt->escape_buf);
+            if (n < 1) n = 1;
+            if (n > VTERM_ROWS - vt->cursor_y) n = VTERM_ROWS - vt->cursor_y;
+
+            // Move lines up
+            int lines_to_move = VTERM_ROWS - vt->cursor_y - n;
+            if (lines_to_move > 0) {
+                memmove(&vt->cells[vt->cursor_y * VTERM_COLS],
+                        &vt->cells[(vt->cursor_y + n) * VTERM_COLS],
+                        lines_to_move * VTERM_COLS * sizeof(vterm_cell_t));
+            }
+
+            // Clear vacated lines at bottom
+            for (int y = VTERM_ROWS - n; y < VTERM_ROWS; y++) {
+                vterm_cell_t *row = &vt->cells[y * VTERM_COLS];
+                for (int x = 0; x < VTERM_COLS; x++) {
+                    row[x].ch = ' ';
+                    row[x].attr = VTERM_DEFAULT_ATTR;
+                }
+            }
+            break;
+        }
+        case 'n':
+            if (vt->escape_buf[0] == '6' && vt->escape_buf[1] == '\0') {
+                char resp[32];
+                snprintf(resp, sizeof(resp), "\x1b[%d;%dR", vt->cursor_y + 1, vt->cursor_x + 1);
+                for (int i = 0; resp[i] != '\0'; i++) vterm_send_input(s_active_vt, resp[i]);
+            }
+            break;
+        }
+
+        vt->escape_state = 0;
+        vt->escape_len = 0;
         return 1;
     }
-    
-    return 1;  // Still in escape sequence
+
+    return 1;
 }
 
 // ============ Public API ============
 
 esp_err_t vterm_init(void)
 {
-    // --- CHANGE 2: Allocate memory in PSRAM ---
-    if (s_vterms == NULL) {
-        // Allocate the array of structures in PSRAM
-        // We use calloc to zero-initialize it automatically
-        s_vterms = (vterm_t *)heap_caps_calloc(VTERM_COUNT, sizeof(vterm_t), MALLOC_CAP_SPIRAM);
-        
-        if (s_vterms == NULL) {
-            printf("Error: Failed to allocate vterm buffers in PSRAM\n");
-            return ESP_ERR_NO_MEM;
-        }
-    }
-
-    s_task_map_mutex = xSemaphoreCreateMutex();
-    if (!s_task_map_mutex) {
+    // 1. Allocate the shared HOT buffer in IRAM (Internal RAM)
+    s_iram_buffer = (vterm_cell_t *)heap_caps_malloc(BUFFER_SIZE_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!s_iram_buffer) {
+        printf("Failed to allocate IRAM vterm buffer\n");
         return ESP_ERR_NO_MEM;
     }
-    
-    // Clear task map
+    // Clear it initially
+    memset(s_iram_buffer, 0, BUFFER_SIZE_BYTES);
+
+    // 2. Allocate VTs struct
+    //s_vterms = (vterm_t *)heap_caps_calloc(VTERM_COUNT, sizeof(vterm_t), MALLOC_CAP_SPIRAM);
+    s_vterms = (vterm_t *)heap_caps_calloc(VTERM_COUNT, sizeof(vterm_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!s_vterms) return ESP_ERR_NO_MEM;
+
+    s_task_map_mutex = xSemaphoreCreateMutex();
     memset(s_task_map, 0, sizeof(s_task_map));
-    for (int i = 0; i < MAX_TASKS; i++) {
-        s_task_map[i].vt_id = -1;
-    }
+    for(int i=0; i<MAX_TASKS; i++) s_task_map[i].vt_id = -1;
     
-    // Initialize each VT
     for (int i = 0; i < VTERM_COUNT; i++) {
         vterm_t *vt = &s_vterms[i];
-        
         vt->input_queue = xQueueCreate(INPUT_QUEUE_SIZE, sizeof(char));
-        if (!vt->input_queue) {
-            return ESP_ERR_NO_MEM;
-        }
-        
         vt->mutex = xSemaphoreCreateMutex();
-        if (!vt->mutex) {
-            return ESP_ERR_NO_MEM;
-        }
         
-        vt->current_attr = VTERM_DEFAULT_ATTR;
+        // Allocate PSRAM backing store
+        vt->storage_cells = (vterm_cell_t *)heap_caps_malloc(BUFFER_SIZE_BYTES, MALLOC_CAP_SPIRAM);
+        if (!vt->storage_cells) return ESP_ERR_NO_MEM;
+
+        // Default: point to storage. Switch() will fix the active one.
+        vt->cells = vt->storage_cells;
         
-        // Note: vterm_clear_internal needs s_vterms to be valid, which it now is.
-        // We need to temporarily declare the prototype or move the function up, 
-        // or just rely on the static declaration earlier in your file.
-        // Assuming vterm_clear_internal is static defined above:
-        vterm_clear_internal(vt); 
-        
-        vt->dirty = 0;
+        vterm_clear_internal(vt);
     }
-    
+
+    // 3. Set up initial active VT (0)
     s_active_vt = 0;
+    // Load VT0 storage into IRAM
+    memcpy(s_iram_buffer, s_vterms[0].storage_cells, BUFFER_SIZE_BYTES);
+    // Point VT0 to IRAM
+    s_vterms[0].cells = s_iram_buffer;
+
     return ESP_OK;
+}
+
+vterm_cell_t *vterm_get_direct_buffer(void)
+{
+    return s_iram_buffer;
 }
 
 void vterm_switch(int vt_id)
 {
     if (vt_id < 0 || vt_id >= VTERM_COUNT) return;
     if (vt_id == s_active_vt) return;
-    
+
+    vterm_t *old_vt = &s_vterms[s_active_vt];
+    vterm_t *new_vt = &s_vterms[vt_id];
+
+    // Lock both to ensure no writing happens during swap
+    xSemaphoreTake(old_vt->mutex, portMAX_DELAY);
+    xSemaphoreTake(new_vt->mutex, portMAX_DELAY);
+
+    // 1. Save Active State: Copy IRAM -> Old PSRAM Storage
+    memcpy(old_vt->storage_cells, s_iram_buffer, BUFFER_SIZE_BYTES);
+    old_vt->cells = old_vt->storage_cells; // Old now points to PSRAM
+
+    // 2. Load New State: Copy New PSRAM Storage -> IRAM
+    memcpy(s_iram_buffer, new_vt->storage_cells, BUFFER_SIZE_BYTES);
+    new_vt->cells = s_iram_buffer; // New now points to IRAM
+
     s_active_vt = vt_id;
-    vterm_refresh();
-    
-    // Call user callback if registered
-    if (s_on_switch_cb) {
-        s_on_switch_cb(vt_id);
-    }
-}
 
-void vterm_set_switch_callback(void (*cb)(int new_vt))
-{
-    s_on_switch_cb = cb;
-}
+    xSemaphoreGive(new_vt->mutex);
+    xSemaphoreGive(old_vt->mutex);
 
-void vterm_set_render_callback(void (*cb)(int vt_id))
-{
-    s_on_render_cb = cb;
-}
-
-// Notify that screen content changed (call render callback if active VT)
-static void notify_render(int vt_id)
-{
-    if (s_on_render_cb && vt_id == s_active_vt) {
-        s_on_render_cb(vt_id);
-    }
-}
-
-int vterm_get_active(void)
-{
-    return s_active_vt;
+    if (s_on_switch_cb) s_on_switch_cb(vt_id);
 }
 
 void vterm_putchar(int vt_id, char c)
 {
     if (vt_id < 0 || vt_id >= VTERM_COUNT) return;
-    
     vterm_t *vt = &s_vterms[vt_id];
     
     xSemaphoreTake(vt->mutex, portMAX_DELAY);
-    
-    // Handle escape sequences
     if (!vterm_handle_escape(vt, c)) {
         vterm_putchar_internal(vt, c);
     }
-    
+    vt->dirty = 1;
     xSemaphoreGive(vt->mutex);
-    
-    // Notify render callback (outside mutex to avoid deadlock)
-    notify_render(vt_id);
 }
 
 void vterm_write(int vt_id, const char *data, size_t len)
 {
     if (vt_id < 0 || vt_id >= VTERM_COUNT) return;
-    
     vterm_t *vt = &s_vterms[vt_id];
-    
+
     xSemaphoreTake(vt->mutex, portMAX_DELAY);
-    
-    for (size_t i = 0; i < len; i++) {
-        if (!vterm_handle_escape(vt, data[i])) {
-            vterm_putchar_internal(vt, data[i]);
+    const char *p = data;
+    const char *end = data + len;
+
+    // Cache state
+    int cx = vt->cursor_x;
+    int cy = vt->cursor_y;
+    uint8_t current_attr = vt->current_attr;
+    int escape_mode = vt->escape_state;
+
+    vterm_cell_t *cells_base = vt->cells;
+    vterm_cell_t *cursor_ptr = &cells_base[cy * VTERM_COLS + cx];
+    vterm_cell_t *row_end = &cells_base[cy * VTERM_COLS + VTERM_COLS];
+
+    while (p < end) {
+        char c = *p++;
+
+        // Fast path: printable ASCII characters (most common case)
+        if (escape_mode == 0 && c >= 32 && c < 127) {
+            cursor_ptr->ch = c;
+            cursor_ptr->attr = current_attr;
+            cursor_ptr++;
+            cx++;
+            if (cursor_ptr >= row_end) {
+                cx = 0; cy++;
+                if (cy >= VTERM_ROWS) {
+                    vt->cursor_x = cx; vt->cursor_y = cy;
+                    vterm_scroll(vt);
+                    cy = vt->cursor_y;
+                    cursor_ptr = &cells_base[cy * VTERM_COLS + cx];
+                    row_end = &cells_base[cy * VTERM_COLS + VTERM_COLS];
+                } else {
+                    row_end += VTERM_COLS;
+                }
+            }
+            continue;
+        }
+
+        // Slow path: escape sequences and control characters
+        vt->cursor_x = cx;
+        vt->cursor_y = cy;
+        vt->current_attr = current_attr;
+        vt->escape_state = escape_mode;
+
+        if (!vterm_handle_escape(vt, c)) {
+            vterm_putchar_internal(vt, c);
+        }
+
+        escape_mode = vt->escape_state;
+        current_attr = vt->current_attr;
+
+        if (vt->cursor_x != cx || vt->cursor_y != cy) {
+            cx = vt->cursor_x;
+            cy = vt->cursor_y;
+            cursor_ptr = &cells_base[cy * VTERM_COLS + cx];
+            row_end = &cells_base[cy * VTERM_COLS + VTERM_COLS];
         }
     }
-    
+
+    vt->cursor_x = cx;
+    vt->cursor_y = cy;
+    vt->current_attr = current_attr;
+    vt->escape_state = escape_mode;
+    vt->dirty = 1;
+
     xSemaphoreGive(vt->mutex);
-    
-    // Notify render callback once for the whole write
-    notify_render(vt_id);
 }
 
-int vterm_getchar(int vt_id, int timeout_ms)
-{
+// Helpers
+void vterm_set_switch_callback(void (*cb)(int)) { s_on_switch_cb = cb; }
+void vterm_set_render_callback(void (*cb)(int)) { s_on_render_cb = cb; }
+int vterm_get_active(void) { return s_active_vt; }
+void vterm_get_size(int *r, int *c) { if(r) *r=VTERM_ROWS; if(c) *c=VTERM_COLS; }
+
+void vterm_clear(int vt_id) {
+    if(vt_id<0||vt_id>=VTERM_COUNT) return;
+    xSemaphoreTake(s_vterms[vt_id].mutex, portMAX_DELAY);
+    vterm_clear_internal(&s_vterms[vt_id]);
+    xSemaphoreGive(s_vterms[vt_id].mutex);
+}
+
+int vterm_getchar(int vt_id, int timeout_ms) {
     if (vt_id < 0 || vt_id >= VTERM_COUNT) return -1;
-    
-    vterm_t *vt = &s_vterms[vt_id];
     char c;
-    
     TickType_t wait = (timeout_ms < 0) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
-    
-    if (xQueueReceive(vt->input_queue, &c, wait) == pdTRUE) {
-        return (unsigned char)c;
-    }
+    if (xQueueReceive(s_vterms[vt_id].input_queue, &c, wait) == pdTRUE) return (unsigned char)c;
     return -1;
 }
 
-void vterm_send_input(int vt_id, char c)
-{
-    if (vt_id < 0 || vt_id >= VTERM_COUNT) return;
-    
-    vterm_t *vt = &s_vterms[vt_id];
-    xQueueSend(vt->input_queue, &c, 0);
+void vterm_send_input(int vt_id, char c) {
+    if (vt_id >= 0 && vt_id < VTERM_COUNT) xQueueSend(s_vterms[vt_id].input_queue, &c, 0);
 }
 
-void vterm_set_task(TaskHandle_t task, int vt_id)
-{
+void vterm_set_task(TaskHandle_t task, int vt_id) {
     xSemaphoreTake(s_task_map_mutex, portMAX_DELAY);
-    
-    // Find existing or empty slot
     int empty_slot = -1;
     for (int i = 0; i < MAX_TASKS; i++) {
         if (s_task_map[i].task == task) {
@@ -538,131 +690,48 @@ void vterm_set_task(TaskHandle_t task, int vt_id)
             xSemaphoreGive(s_task_map_mutex);
             return;
         }
-        if (empty_slot < 0 && s_task_map[i].task == NULL) {
-            empty_slot = i;
-        }
+        if (empty_slot < 0 && s_task_map[i].task == NULL) empty_slot = i;
     }
-    
-    // Add new mapping
     if (empty_slot >= 0) {
         s_task_map[empty_slot].task = task;
         s_task_map[empty_slot].vt_id = vt_id;
     }
-    
     xSemaphoreGive(s_task_map_mutex);
 }
 
-int vterm_get_task_vt(TaskHandle_t task)
-{
+int vterm_get_task_vt(TaskHandle_t task) {
     int vt_id = -1;
-    
     xSemaphoreTake(s_task_map_mutex, portMAX_DELAY);
-    
-    for (int i = 0; i < MAX_TASKS; i++) {
-        if (s_task_map[i].task == task) {
-            vt_id = s_task_map[i].vt_id;
-            break;
+    for(int i=0; i<MAX_TASKS; i++) {
+        if(s_task_map[i].task == task) { 
+            vt_id = s_task_map[i].vt_id; 
+            break; 
         }
     }
-    
     xSemaphoreGive(s_task_map_mutex);
     return vt_id;
 }
 
-int vterm_get_current_vt(void)
-{
+int vterm_get_current_vt(void) {
     int vt = vterm_get_task_vt(xTaskGetCurrentTaskHandle());
-    // Default to active VT if not mapped
     return (vt >= 0) ? vt : s_active_vt;
 }
 
-void vterm_clear(int vt_id)
-{
-    if (vt_id < 0 || vt_id >= VTERM_COUNT) return;
-    
-    vterm_t *vt = &s_vterms[vt_id];
-    
-    xSemaphoreTake(vt->mutex, portMAX_DELAY);
-    vterm_clear_internal(vt);
-    xSemaphoreGive(vt->mutex);
-    
-    if (vt_id == s_active_vt) {
-        vterm_refresh();
-    }
-    
-    notify_render(vt_id);
-}
-
-void vterm_refresh(void)
-{
+void vterm_refresh(void) {
+    // Just force a snapshot next cycle
     vterm_t *vt = &s_vterms[s_active_vt];
-    
     xSemaphoreTake(vt->mutex, portMAX_DELAY);
-    vt->dirty = 0;
+    vt->dirty = 1;
     xSemaphoreGive(vt->mutex);
-    
-    // Notify render callback
-    notify_render(s_active_vt);
 }
 
-// Display status indicator showing active VT
-void vterm_show_status(void)
-{
-    // Status format: "[VT0]" or "[VT1]" in top-right corner
-    char status[8];
-    snprintf(status, sizeof(status), "[VT%d]", s_active_vt);
-    
-    // TODO: Could overlay on screen via render callback
-    (void)status;
-}
-
-int vterm_input_available(int vt_id)
-{
-    if (vt_id < 0 || vt_id >= VTERM_COUNT) return 0;
-    return uxQueueMessagesWaiting(s_vterms[vt_id].input_queue) > 0;
-}
-
-const vterm_cell_t *vterm_get_cells(int vt_id)
-{
-    if (vt_id < 0 || vt_id >= VTERM_COUNT) return NULL;
-    // Note: caller should hold mutex or accept slight race conditions
-    return &s_vterms[vt_id].cells[0][0];
-}
-
-void vterm_get_size(int *rows, int *cols)
-{
-    if (rows) *rows = VTERM_ROWS;
-    if (cols) *cols = VTERM_COLS;
-}
-
-// ============ Input Routing with Hotkey Detection ============
-
-/*
- * Hotkey sequences supported (all switch to VT 0-3):
- * 
- * Ctrl+F1-F4:
- *   ESC [ 1 ; 5 P/Q/R/S       (xterm style)
- *   ESC [ 11;5~ to [14;5~    (vt style with modifier)
- *   ESC O 5 P/Q/R/S          (alternate)
- * 
- * Plain F1-F4 (fallback):
- *   ESC O P/Q/R/S
- *   ESC [ 11~ to [14~
- *
- * Ctrl+1-4:
- *   ESC [ 49;5u to [52;5u    (CSI u / fixterms mode)
- */
-
+// Hotkey / Input logic (Compact copy for completeness)
 static char s_esc_buf[16];
 static int s_esc_len = 0;
 static TickType_t s_esc_start = 0;
 
-// Flush buffered escape chars to active vterm as regular input
-static void flush_input_buffer(void)
-{
-    for (int i = 0; i < s_esc_len; i++) {
-        vterm_send_input(s_active_vt, s_esc_buf[i]);
-    }
+static void flush_input_buffer(void) {
+    for (int i = 0; i < s_esc_len; i++) vterm_send_input(s_active_vt, s_esc_buf[i]);
     s_esc_len = 0;
 }
 
@@ -832,4 +901,53 @@ int vterm_input_feed(char c)
     // Normal character, pass through
     vterm_send_input(s_active_vt, c);
     return 0;
+}
+
+// ============ Palette API ============
+
+// Default xterm-compatible 16-color palette (RGB565)
+static uint16_t s_palette[16] = {
+    0x0000,  // 0: Black
+    0x8000,  // 1: Red (dark)
+    0x0400,  // 2: Green (dark)
+    0x8400,  // 3: Yellow (dark/brown)
+    0x0010,  // 4: Blue (dark)
+    0x8010,  // 5: Magenta (dark)
+    0x0410,  // 6: Cyan (dark)
+    0xC618,  // 7: White (light gray)
+    0x8410,  // 8: Bright Black (dark gray)
+    0xF800,  // 9: Bright Red
+    0x07E0,  // 10: Bright Green
+    0xFFE0,  // 11: Bright Yellow
+    0x001F,  // 12: Bright Blue
+    0xF81F,  // 13: Bright Magenta
+    0x07FF,  // 14: Bright Cyan
+    0xFFFF   // 15: Bright White
+};
+
+void vterm_set_palette_color(int index, uint16_t rgb565)
+{
+    if (index >= 0 && index < 16) {
+        s_palette[index] = rgb565;
+    }
+}
+
+uint16_t vterm_get_palette_color(int index)
+{
+    if (index >= 0 && index < 16) {
+        return s_palette[index];
+    }
+    return 0;
+}
+
+void vterm_set_palette(const uint16_t palette[16])
+{
+    for (int i = 0; i < 16; i++) {
+        s_palette[i] = palette[i];
+    }
+}
+
+const uint16_t *vterm_get_palette(void)
+{
+    return s_palette;
 }

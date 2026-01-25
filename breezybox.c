@@ -272,6 +272,7 @@ esp_err_t breezybox_start_stdio(size_t stack_size, uint32_t priority)
     return ESP_OK;
 }
 
+#ifdef ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT
 esp_err_t breezybox_start_usb(size_t stack_size, uint32_t priority)
 {
     // Initialize filesystem and exec
@@ -298,3 +299,4 @@ esp_err_t breezybox_start_usb(size_t stack_size, uint32_t priority)
 
     return esp_console_start_repl(s_repl);
 }
+#endif // ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT

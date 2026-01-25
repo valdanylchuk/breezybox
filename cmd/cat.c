@@ -28,10 +28,12 @@ int cmd_cat(int argc, char **argv)
     }
 
     char buf[128];
-    while (fgets(buf, sizeof(buf), f)) {
-        printf("%s", buf);
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        fwrite(buf, 1, n, stdout);
     }
     fclose(f);
+    fflush(stdout);
 
     return 0;
 }

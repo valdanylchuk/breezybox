@@ -5,6 +5,7 @@ idf_component_register(
         "breezy_wrap.c"
         "breezy_exec.c"
         "breezy_exports.c"
+        "breezy_http.c"
         "vterm.c"
         "cmd/ls.c"
         "cmd/cat.c"
@@ -23,8 +24,7 @@ idf_component_register(
         "cmd/date.c"
         "cmd/eget.c"
     INCLUDE_DIRS "include"
-    REQUIRES console vfs
-    PRIV_REQUIRES nvs_flash esp_wifi esp_netif esp_http_server esp_http_client json mbedtls
+    REQUIRES console littlefs nvs_flash esp_wifi esp_netif esp_http_server esp_http_client json vfs mbedtls elf_loader zlib
 )
 
 # Propagate linker wrap options to any project using this component

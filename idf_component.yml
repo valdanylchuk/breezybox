@@ -1,4 +1,4 @@
-version: "1.0.0"
+version: "1.0.1"
 description: "BreezyBox - A mini shell for esp32-s3"
 url: "https://github.com/valdanylchuk/breezybox"
 repository: "https://github.com/valdanylchuk/breezybox.git"
