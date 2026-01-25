@@ -23,7 +23,7 @@ A BusyBox-inspired shell and virtual terminal system for ESP32.
 ### ESP Component Registry (Recommended)
 
 ```bash
-idf.py add-dependency "valdanylchuk/breezybox^1.0.0"
+idf.py add-dependency "valdanylchuk/breezybox"
 ```
 
 ### Manual Installation
@@ -130,42 +130,6 @@ BreezyBox includes a virtual terminal (vterm) system with:
 - Multiple independent terminals
 - Render callback for custom display output
 
-### Display Integration Example
-
-```c
-#include "vterm.h"
-#include "console_display.h"  // Your LVGL display module
-
-// Called when vterm content changes
-static void on_vterm_render(int vt_id)
-{
-    if (vt_id != vterm_get_active()) return;
-    
-    const vterm_cell_t *cells = vterm_get_cells(vt_id);
-    int rows, cols;
-    vterm_get_size(&rows, &cols);
-    
-    // Update your display with cells...
-    console_display_update(cells, rows, cols);
-}
-
-void app_main(void)
-{
-    // Initialize display
-    my_display_init();
-    console_display_init();
-    
-    // Set up vterm render callback
-    vterm_set_render_callback(on_vterm_render);
-    
-    // Initialize console I/O (redirects stdin/stdout to vterm)
-    my_console_init();
-    
-    // Start shell
-    breezybox_start_stdio(8192, 5);
-}
-```
-
 ## Adding Custom Commands
 
 ```c
@@ -202,7 +166,7 @@ This is free software under MIT License - see [LICENSE](LICENSE) file.
 
 This is in early stage with many rough edges. Pull requests are better than bug reports. I know there would be hundreds of bugs if we were to catalog them, an I would never be able to address them all. Top priority for help:
 
-- Make busybox easy and smooth to install
+- Make breezybox easy and smooth to install
 - Improve the documentation in the repo/Readme; create a Wiki
 - Make existing core features more stable without major code bloat
 
