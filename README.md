@@ -52,6 +52,14 @@ void app_main(void)
 }
 ```
 
+## Extended fully working example/demo
+
+[My BreezyBox-based hobby cyberdeck project](https://github.com/valdanylchuk/breezydemo).
+
+Includes intergration with a custom LCD driver, some custom commands, and a demo video.
+
+See also some [BreezyBox compatible ELF apps here](https://github.com/valdanylchuk/breezyapps).
+
 ## Commands
 
 ### File Operations
