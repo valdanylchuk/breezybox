@@ -172,14 +172,12 @@ This is free software under MIT License - see [LICENSE](LICENSE) file.
 
 ## Contributing - help wanted!
 
-This is in early stage with many rough edges. Pull requests are better than bug reports. I know there would be hundreds of bugs if we were to catalog them, an I would never be able to address them all. Top priority for help:
+The best help is currently more testing beyond "works on my computer", more shared examples and fun use cases:
 
-- Make breezybox easy and smooth to install
-- Improve the documentation in the repo/Readme; create a Wiki
-- Make existing core features more stable without major code bloat
+1. More ELF apps – see the examples at my [breezyapps repo](https://github.com/valdanylchuk/breezyapps), they are super easy to follow. Even a carefully written stdlib C program with no platform-specific bits may work sometimes, also with some ANSI codes. But be sure to verify on the actual ESP32-S3: the memory is tight, the larger PSRAM requires alignment, and there are other limits and quirks. You can publish and install the apps using your own repo.
 
-## Acknowledgments
+2. More full example firmware repositories: for different boards, with different styles. Maybe you provide the basic LVGL text label example on some popular board. Maybe you prefer C++ to plain C. Maybe you embrace the GUI. Maybe you port some retro games. Maybe you even make it work on P4, or C6 (RISC-V, a completely different CPU). Maybe you attach some cool gadgets to it. Maybe you build an extra cool cyberdeck case. Or maybe you reproduce the exact same thing, and just share your setup experience and hands-on impressions.
 
-- Inspired by [BusyBox](https://busybox.net/)
-- Uses [linenoise](https://github.com/antirez/linenoise) for line editing
-- Built for the ESP-IDF framework
+It would be so cool to see more people using BreezyBox, and to have more ready-to-clone examples for everyone!
+
+Have fun!
