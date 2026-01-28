@@ -38,6 +38,7 @@ typedef struct {
 
     int cursor_x;
     int cursor_y;
+    int cursor_visible;    // 1 = show, 0 = hidden (DECTCEM)
     uint8_t current_attr;  // 4-bit fg + 4-bit bg
 
     QueueHandle_t input_queue;
@@ -162,6 +163,7 @@ static void vterm_clear_internal(vterm_t *vt)
 
     vt->cursor_x = 0;
     vt->cursor_y = 0;
+    vt->cursor_visible = 1;
     vt->current_attr = VTERM_DEFAULT_ATTR;
 }
 
@@ -334,8 +336,15 @@ static int vterm_handle_escape(vterm_t *vt, char c)
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
         vt->escape_buf[vt->escape_len - 1] = '\0';
 
-        // DEC private mode sequences (ESC [ ? ...) - gracefully ignore
+        // DEC private mode sequences (ESC [ ? ...)
         if (vt->escape_buf[0] == '?') {
+            // Parse ?25h (show cursor) and ?25l (hide cursor)
+            if (c == 'h' && strcmp(vt->escape_buf, "?25") == 0) {
+                vt->cursor_visible = 1;
+            } else if (c == 'l' && strcmp(vt->escape_buf, "?25") == 0) {
+                vt->cursor_visible = 0;
+            }
+            // Other DEC private modes gracefully ignored
             vt->escape_state = 0;
             vt->escape_len = 0;
             return 1;
@@ -662,6 +671,15 @@ void vterm_set_render_callback(void (*cb)(int)) { s_on_render_cb = cb; }
 int vterm_get_active(void) { return s_active_vt; }
 void vterm_get_size(int *r, int *c) { if(r) *r=VTERM_ROWS; if(c) *c=VTERM_COLS; }
 
+void vterm_get_cursor(int vt_id, int *col, int *row, int *visible) {
+    if (vt_id >= 0 && vt_id < VTERM_COUNT) {
+        vterm_t *vt = &s_vterms[vt_id];
+        if (col) *col = vt->cursor_x;
+        if (row) *row = vt->cursor_y;
+        if (visible) *visible = vt->cursor_visible;
+    }
+}
+
 void vterm_clear(int vt_id) {
     if(vt_id<0||vt_id>=VTERM_COUNT) return;
     xSemaphoreTake(s_vterms[vt_id].mutex, portMAX_DELAY);
@@ -729,10 +747,15 @@ void vterm_refresh(void) {
 static char s_esc_buf[16];
 static int s_esc_len = 0;
 static TickType_t s_esc_start = 0;
+static portMUX_TYPE s_input_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void flush_input_buffer(void) {
+    // Use critical section to prevent shell task from preempting mid-flush
+    // This ensures all chars of an escape sequence are added atomically
+    portENTER_CRITICAL(&s_input_mux);
     for (int i = 0; i < s_esc_len; i++) vterm_send_input(s_active_vt, s_esc_buf[i]);
     s_esc_len = 0;
+    portEXIT_CRITICAL(&s_input_mux);
 }
 
 // Check if buffer matches a VT switch sequence, return VT number or -1

@@ -45,6 +45,7 @@ int vterm_get_current_vt(void);
 void vterm_clear(int vt_id);
 void vterm_refresh(void);
 void vterm_get_size(int *rows, int *cols);
+void vterm_get_cursor(int vt_id, int *col, int *row, int *visible);
 void vterm_set_switch_callback(void (*cb)(int new_vt));
 void vterm_set_render_callback(void (*cb)(int vt_id));
 const vterm_cell_t *vterm_get_cells(int vt_id);
