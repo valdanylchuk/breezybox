@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <math.h>
 
+#include <fcntl.h>
+
 #include "esp_cpu.h"
 #include "esp_heap_caps.h"
 #include "vterm.h"
@@ -66,6 +68,14 @@ void breezybox_export_symbols(void)
         (void*)lseek,
         (void*)clock,
 
+        // debug
+        (void*)fdopen,
+        (void*)fgetc,
+        (void*)freopen,
+        (void*)realpath,
+        (void*)localtime,
+        (void*)ldexp,
+
         // Other commonly useful functions that might be missing:
         (void*)sscanf,
         (void*)strtok,
@@ -100,7 +110,16 @@ void breezybox_export_symbols(void)
         (void*)crc32,
         (void*)ferror,
         (void*)feof,
+
+        // Additional math functions
+        (void*)fabsf,
+        (void*)roundf,
+        (void*)floorf,
+        (void*)fmodf,
+
+        // I/O for non-blocking keyboard input
+        (void*)fcntl,
     };
-    
+
     (void)exports;  // Suppress unused variable warning
 }

@@ -209,7 +209,7 @@ static int run_elf(const char *path, int argc, char **argv)
         return -1;
     }
     
-    uint8_t *elf_data = malloc(file_size);
+    uint8_t *elf_data = heap_caps_malloc(file_size, MALLOC_CAP_SPIRAM);// malloc(file_size);
     if (!elf_data) {
         printf("Out of memory (%ld bytes needed)\n", file_size);
         fclose(f);

@@ -1,4 +1,4 @@
-version: "1.0.2"
+version: "1.0.3"
 description: "BreezyBox - A mini shell for esp32-s3"
 url: "https://github.com/valdanylchuk/breezybox"
 repository: "https://github.com/valdanylchuk/breezybox.git"
@@ -11,6 +11,11 @@ maintainers:
 license: "MIT"
 
 targets:
+  - esp32
+  - esp32c6
+  - esp32c61
+  - esp32p4
+  - esp32s2
   - esp32s3
 
 dependencies:
@@ -21,7 +26,10 @@ dependencies:
     version: "^1.20"
   # ELF loader for running downloaded executables
   espressif/elf_loader:
-    version: "^1.1"
+    version: "^1.3"
   # ZLib for gzip/gunzip ELF commands and general use
   espressif/zlib:
     version: "^1.3"
+  # Our vterm subsystem
+  valdanylchuk/breezy_term:
+    version: "^1.0.1"

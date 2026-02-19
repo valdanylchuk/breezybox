@@ -5,14 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.2] - 2025-01-27
+## [1.0.3] - 2026-02-19
+
+### Added
+
+- declare more targets compatible (aspirational, based on elf_loader)
+
+### Changed
+
+- use the extracted breezy_term component (incl. enter/exit graphics mode)
+- update elf_loader to v1.3
+
+## [1.0.2] - 2026-01-27
 
 ### Added
 
 - text cursor support in vterm
 - atomic sending of escape sequences
 
-## [1.0.1] - 2025-01-25
+## [1.0.1] - 2026-01-25
 
 ### Added
 
@@ -21,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vastly improved and optimized vterm, incl. custom palette support
 - Dependencies: console littlefs nvs_flash esp_wifi esp_netif esp_http_server esp_http_client json vfs mbedtls elf_loader zlib
 
-## [1.0.0] - 2025-01-01
+## [1.0.0] - 2026-01-01
 
 ### Added
 - Initial release

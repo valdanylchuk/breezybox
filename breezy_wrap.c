@@ -20,6 +20,7 @@ DIR* __real_opendir(const char *name);
 struct dirent* __real_readdir(DIR* dirp);
 int __real_closedir(DIR* dirp);
 void __real_rewinddir(DIR* dirp);
+char* __real_realpath(const char *path, char *resolved_path);
 
 // Virtual root directory handle
 #define VIRTUAL_ROOT_MAGIC 0x42525459  // "BRTY"
@@ -173,4 +174,25 @@ void __wrap_rewinddir(DIR* dirp)
     } else {
         __real_rewinddir(dirp);
     }
+}
+
+char* __wrap_realpath(const char *path, char *resolved_path)
+{
+    char temp_buffer[BREEZYBOX_MAX_PATH * 2 + 2];
+    
+    const char *p = breezybox_resolve_path(path, temp_buffer, sizeof(temp_buffer));
+    if (!p) p = path;
+
+    if (strcmp(p, "/") == 0 || strcmp(p, "/root") == 0) {
+        const char* target = (strcmp(p, "/root") == 0) ? "/root" : "/";
+        
+        if (resolved_path == NULL) {
+            return strdup(target);
+        } else {
+            strcpy(resolved_path, target);
+            return resolved_path;
+        }
+    }
+
+    return __real_realpath(p, resolved_path);
 }
