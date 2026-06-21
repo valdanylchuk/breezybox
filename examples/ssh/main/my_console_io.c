@@ -23,7 +23,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-#define CONSOLE_DEV_PATH   "/dev/console"
+// NOT "/dev/console": that path is owned by ESP-IDF's esp_vfs_console, and
+// registering over it makes console_write() recurse into itself.
+#define CONSOLE_DEV_PATH   "/dev/breezy"
 #define MAX_CONSOLE_FDS    4
 
 static int s_fd_flags[MAX_CONSOLE_FDS] = {0};

@@ -24,18 +24,6 @@ extern int freopen;
 extern int localtime;
 extern int ldexp;
 extern int realpath;
-extern int rgb_display_get_framebuffer;
-extern int rgb_display_set_mode;
-extern int rgb_display_set_vga_palette;
-extern int rgb_display_wait_vsync;
-extern int rgb_gfx_blit;
-extern int rgb_gfx_blit_flip;
-extern int rgb_gfx_clear;
-extern int rgb_gfx_pixel;
-extern int rgb_gfx_rectfill;
-extern int bt_keyboard_is_pressed;
-extern int bt_keyboard_get_modifiers;
-extern int bt_keyboard_connected;
 extern int roundf;
 extern int gzopen;
 extern int gzread;
@@ -58,7 +46,6 @@ extern int esp_http_client_set_header;
 extern int elf_get_cycle_count;
 extern int vTaskDelayUntil;
 extern int xTaskGetTickCount;
-extern int rgb_display_refresh_palette;
 extern int vterm_set_palette;
 extern int vterm_get_palette;
 extern int srand;
@@ -361,7 +348,6 @@ extern int tcp_connect;
 extern int esp_intr_disable_source;
 extern int pbuf_add_header_force;
 extern int netconn_free;
-extern int rgb_display_init;
 extern int panic_print_registers;
 extern int prefix_list;
 extern int ip4_output_if_opt;
@@ -498,7 +484,6 @@ extern int _xt_medint2_exit;
 extern int strtof_l;
 extern int spi_flash_set_rom_required_regs;
 extern int esp_cpu_intr_get_desc;
-extern int esp_lcd_panel_invert_color;
 extern int _write_r;
 extern int _fprintf_r;
 extern int _exit;
@@ -595,7 +580,6 @@ extern int g_flash_guard_default_ops;
 extern int esp_ipc_isr_start_fl;
 extern int esp_ipc_call_blocking;
 extern int gpio_hal_iomux_in;
-extern int esp_lcd_panel_swap_xy;
 extern int xTaskGenericNotify;
 extern int cache_hal_get_cache_line_size;
 extern int _xt_coproc_init;
@@ -888,7 +872,6 @@ extern int ip4_output_if_opt_src;
 extern int pbuf_copy_partial;
 extern int longjmp;
 extern int gdma_ahb_hal_set_strategy;
-extern int esp_lcd_panel_mirror;
 extern int esp_vfs_readdir;
 extern int ledc_update_duty;
 extern int gpio_sleep_set_direction;
@@ -1062,7 +1045,6 @@ extern int tcp_free_ooseq;
 extern int spi_flash_chip_issi_set_io_mode;
 extern int pbuf_clen;
 extern int __kernel_cos;
-extern int esp_lcd_panel_reset;
 extern int gdma_ahb_hal_set_burst_size;
 extern int esp_vfs_usb_serial_jtag_use_driver;
 extern int vPortTCBPreDeleteHook;
@@ -1154,7 +1136,6 @@ extern int spi_flash_chip_generic_read;
 extern int esp_partition_is_flash_region_writable;
 extern int spi_bus_lock_get_acquiring_dev;
 extern int xRingbufferReceiveUpTo;
-extern int esp_lcd_panel_draw_bitmap;
 extern int mkdir;
 extern int io_mux_force_disable_lp_io_clock;
 extern int gdma_hal_set_burst_size;
@@ -1172,7 +1153,6 @@ extern int esp_log;
 extern int s_microseconds_offset;
 extern int _strtoull_r;
 extern int tcp_bound_pcbs;
-extern int esp_lcd_panel_disp_on_off;
 extern int esp_clk_tree_lp_fast_get_freq_hz;
 extern int memp_IGMP_GROUP;
 extern int gdma_ahb_hal_stop;
@@ -1672,7 +1652,6 @@ extern int __swrite;
 extern int vListInsertEnd;
 extern int esp_register_freertos_idle_hook_for_cpu;
 extern int tcflush;
-extern int esp_lcd_panel_init;
 extern int localtime_r;
 extern int esp_psram_extram_test;
 extern int gpio_pulldown_dis;
@@ -1776,18 +1755,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(localtime),
     ESP_ELFSYM_EXPORT(ldexp),
     ESP_ELFSYM_EXPORT(realpath),
-    ESP_ELFSYM_EXPORT(rgb_display_get_framebuffer),
-    ESP_ELFSYM_EXPORT(rgb_display_set_mode),
-    ESP_ELFSYM_EXPORT(rgb_display_set_vga_palette),
-    ESP_ELFSYM_EXPORT(rgb_display_wait_vsync),
-    ESP_ELFSYM_EXPORT(rgb_gfx_blit),
-    ESP_ELFSYM_EXPORT(rgb_gfx_blit_flip),
-    ESP_ELFSYM_EXPORT(rgb_gfx_clear),
-    ESP_ELFSYM_EXPORT(rgb_gfx_pixel),
-    ESP_ELFSYM_EXPORT(rgb_gfx_rectfill),
-    ESP_ELFSYM_EXPORT(bt_keyboard_is_pressed),
-    ESP_ELFSYM_EXPORT(bt_keyboard_get_modifiers),
-    ESP_ELFSYM_EXPORT(bt_keyboard_connected),
     ESP_ELFSYM_EXPORT(roundf),
     ESP_ELFSYM_EXPORT(gzopen),
     ESP_ELFSYM_EXPORT(gzread),
@@ -1810,7 +1777,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(elf_get_cycle_count),
     ESP_ELFSYM_EXPORT(vTaskDelayUntil),
     ESP_ELFSYM_EXPORT(xTaskGetTickCount),
-    ESP_ELFSYM_EXPORT(rgb_display_refresh_palette),
     ESP_ELFSYM_EXPORT(vterm_set_palette),
     ESP_ELFSYM_EXPORT(vterm_get_palette),
     ESP_ELFSYM_EXPORT(srand),
@@ -2113,7 +2079,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(esp_intr_disable_source),
     ESP_ELFSYM_EXPORT(pbuf_add_header_force),
     ESP_ELFSYM_EXPORT(netconn_free),
-    ESP_ELFSYM_EXPORT(rgb_display_init),
     ESP_ELFSYM_EXPORT(panic_print_registers),
     ESP_ELFSYM_EXPORT(prefix_list),
     ESP_ELFSYM_EXPORT(ip4_output_if_opt),
@@ -2250,7 +2215,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(strtof_l),
     ESP_ELFSYM_EXPORT(spi_flash_set_rom_required_regs),
     ESP_ELFSYM_EXPORT(esp_cpu_intr_get_desc),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_invert_color),
     ESP_ELFSYM_EXPORT(_write_r),
     ESP_ELFSYM_EXPORT(_fprintf_r),
     ESP_ELFSYM_EXPORT(_exit),
@@ -2347,7 +2311,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(esp_ipc_isr_start_fl),
     ESP_ELFSYM_EXPORT(esp_ipc_call_blocking),
     ESP_ELFSYM_EXPORT(gpio_hal_iomux_in),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_swap_xy),
     ESP_ELFSYM_EXPORT(xTaskGenericNotify),
     ESP_ELFSYM_EXPORT(cache_hal_get_cache_line_size),
     ESP_ELFSYM_EXPORT(_xt_coproc_init),
@@ -2640,7 +2603,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(pbuf_copy_partial),
     ESP_ELFSYM_EXPORT(longjmp),
     ESP_ELFSYM_EXPORT(gdma_ahb_hal_set_strategy),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_mirror),
     ESP_ELFSYM_EXPORT(esp_vfs_readdir),
     ESP_ELFSYM_EXPORT(ledc_update_duty),
     ESP_ELFSYM_EXPORT(gpio_sleep_set_direction),
@@ -2814,7 +2776,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(spi_flash_chip_issi_set_io_mode),
     ESP_ELFSYM_EXPORT(pbuf_clen),
     ESP_ELFSYM_EXPORT(__kernel_cos),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_reset),
     ESP_ELFSYM_EXPORT(gdma_ahb_hal_set_burst_size),
     ESP_ELFSYM_EXPORT(esp_vfs_usb_serial_jtag_use_driver),
     ESP_ELFSYM_EXPORT(vPortTCBPreDeleteHook),
@@ -2906,7 +2867,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(esp_partition_is_flash_region_writable),
     ESP_ELFSYM_EXPORT(spi_bus_lock_get_acquiring_dev),
     ESP_ELFSYM_EXPORT(xRingbufferReceiveUpTo),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_draw_bitmap),
     ESP_ELFSYM_EXPORT(mkdir),
     ESP_ELFSYM_EXPORT(io_mux_force_disable_lp_io_clock),
     ESP_ELFSYM_EXPORT(gdma_hal_set_burst_size),
@@ -2924,7 +2884,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(s_microseconds_offset),
     ESP_ELFSYM_EXPORT(_strtoull_r),
     ESP_ELFSYM_EXPORT(tcp_bound_pcbs),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_disp_on_off),
     ESP_ELFSYM_EXPORT(esp_clk_tree_lp_fast_get_freq_hz),
     ESP_ELFSYM_EXPORT(memp_IGMP_GROUP),
     ESP_ELFSYM_EXPORT(gdma_ahb_hal_stop),
@@ -3424,7 +3383,6 @@ const struct esp_elfsym g_customer_elfsyms[] = {
     ESP_ELFSYM_EXPORT(vListInsertEnd),
     ESP_ELFSYM_EXPORT(esp_register_freertos_idle_hook_for_cpu),
     ESP_ELFSYM_EXPORT(tcflush),
-    ESP_ELFSYM_EXPORT(esp_lcd_panel_init),
     ESP_ELFSYM_EXPORT(localtime_r),
     ESP_ELFSYM_EXPORT(esp_psram_extram_test),
     ESP_ELFSYM_EXPORT(gpio_pulldown_dis),
