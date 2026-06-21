@@ -44,6 +44,8 @@ void vterm_write(int vt_id, const char *data, size_t len);
 int vterm_getchar(int vt_id, int timeout_ms);
 void vterm_send_input(int vt_id, char c);
 void vterm_get_size(int *rows, int *cols);
+void vterm_set_size_override(int rows, int cols);
+void vterm_clear_size_override(void);
 void vterm_get_cursor(int vt_id, int *col, int *row, int *visible);
 void vterm_set_switch_callback(void (*cb)(int new_vt));
 

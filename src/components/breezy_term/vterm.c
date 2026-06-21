@@ -659,7 +659,33 @@ void vterm_write(int vt_id, const char *data, size_t len)
 // Helpers
 void vterm_set_switch_callback(void (*cb)(int)) { s_on_switch_cb = cb; }
 int vterm_get_active(void) { return s_active_vt; }
-void vterm_get_size(int *r, int *c) { if(r) *r=VTERM_ROWS; if(c) *c=VTERM_COLS; }
+// Per-task size override (for SSH sessions with different terminal dimensions)
+static TaskHandle_t s_size_override_task = NULL;
+static int s_size_override_rows = 0;
+static int s_size_override_cols = 0;
+
+void vterm_set_size_override(int rows, int cols) {
+    // Clamp to LCD size — larger terminals cause OOM on ESP32 (limited SRAM)
+    if (cols > VTERM_COLS) cols = VTERM_COLS;
+    if (rows > VTERM_ROWS) rows = VTERM_ROWS;
+    s_size_override_rows = rows;
+    s_size_override_cols = cols;
+    s_size_override_task = xTaskGetCurrentTaskHandle();
+}
+
+void vterm_clear_size_override(void) {
+    s_size_override_task = NULL;
+}
+
+void vterm_get_size(int *r, int *c) {
+    if (s_size_override_task == xTaskGetCurrentTaskHandle()) {
+        if (r) *r = s_size_override_rows;
+        if (c) *c = s_size_override_cols;
+        return;
+    }
+    if(r) *r=VTERM_ROWS;
+    if(c) *c=VTERM_COLS;
+}
 
 void vterm_get_cursor(int vt_id, int *col, int *row, int *visible) {
     if (vt_id >= 0 && vt_id < VTERM_COUNT) {

@@ -1,9 +1,9 @@
 version: "1.0.2"
 description: "breezy_term - The vterm used in BreezyBox, a mini shell for esp32-s3"
-url: "https://github.com/valdanylchuk/breezy_term"
-repository: "https://github.com/valdanylchuk/breezy_term.git"
-documentation: "https://github.com/valdanylchuk/breezy_term#readme"
-issues: "https://github.com/valdanylchuk/breezy_term/issues"
+url: "https://github.com/valdanylchuk/breezybox/tree/main/src/components/breezy_term"
+repository: "https://github.com/valdanylchuk/breezybox.git"
+documentation: "https://github.com/valdanylchuk/tree/main/src/components/breezy_term#readme"
+issues: "https://github.com/valdanylchuk/breezybox/issues"
 
 maintainers:
   - "Valentyn Danylchuk <val@danylchuk.com>"
