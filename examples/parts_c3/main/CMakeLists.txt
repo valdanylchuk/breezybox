@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "main.c"
+    PRIV_REQUIRES
+        driver
+        breezy_term
+        breezy_bt
+    INCLUDE_DIRS
+        "."
+)

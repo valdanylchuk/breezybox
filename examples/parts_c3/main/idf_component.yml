@@ -1,0 +1,7 @@
+dependencies:
+  idf:
+    version: '>=5.5.0'
+  valdanylchuk/breezy_term:
+     version: '>=1.0.2'
+  valdanylchuk/breezy_bt:
+     version: '>=1.0.2'
