@@ -1,0 +1,18 @@
+menu "Breezy Terminal (vterm)"
+
+    config VTERM_COLS
+        int "Terminal columns"
+        default 128
+        help
+            Number of character columns in the virtual terminal grid. This is
+            also the cell-buffer row stride. Match it to your display, e.g. 100
+            for an 800px-wide panel with an 8px-wide font.
+
+    config VTERM_ROWS
+        int "Terminal rows"
+        default 37
+        help
+            Number of character rows in the virtual terminal grid. Match it to
+            your display, e.g. 30 for a 480px-tall panel with a 16px-tall font.
+
+endmenu

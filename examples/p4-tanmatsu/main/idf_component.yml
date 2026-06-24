@@ -1,0 +1,30 @@
+dependencies:
+  idf:
+    version: ">=5.5.0"
+
+  # Tanmatsu board support: MIPI display, built-in keyboard, power, C6 radio.
+  badgeteam/badge-bsp:
+    version: "^1.0.0"
+
+  # Virtual terminal. Overridden to the in-tree copy so we can use the new
+  # CONFIG_VTERM_COLS/ROWS knobs (100x30 for this 800x480 panel).
+  # breezybox itself depends on breezy_term; this override applies tree-wide.
+  valdanylchuk/breezy_term:
+    version: "*"
+    # Relative to this manifest (main/): up to the breezybox repo root, then src/.
+    override_path: "../../../src/components/breezy_term"
+
+  # --- Networking: radio lives on the C6, reached via esp-hosted ---
+  # Same stack the native launcher uses on P4. These satisfy breezybox's
+  # esp_wifi / esp_http / lwip requirements at link time and provide the
+  # Phase-2 radio bring-up (wifi_remote_initialize + esp_hosted custom channel).
+  # The C6 firmware is NOT touched; we only talk to the radio it already runs.
+  # Versions are intentionally loose -- pin them to match your IDF if needed.
+  nicolaielectronics/tanmatsu-wifi:
+    version: "*"
+  nicolaielectronics/wifi-manager:
+    version: "*"
+
+# NOTE: breezybox is pulled in via EXTRA_COMPONENT_DIRS "../.." in the top-level
+# CMakeLists.txt (in-tree development). If you instead install from the registry,
+# add:  valdanylchuk/breezybox: "^1.0.3"

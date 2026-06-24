@@ -1,0 +1,65 @@
+#
+# BreezyBox / Tanmatsu (ESP32-P4) defaults
+# Hardware-specific values mirror the Tanmatsu native launcher so badge-bsp,
+# PSRAM and the esp-hosted link to the C6 radio behave identically.
+#
+
+# --- Target & flash ---
+CONFIG_IDF_TARGET="esp32p4"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- Board support package (Tanmatsu) ---
+CONFIG_BSP_TARGET_TANMATSU=y
+
+# --- PSRAM (P4 / Tanmatsu) ---
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_200M=y
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
+CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION=n
+
+# --- Console: keep a parallel USB-Serial-JTAG console for logs/debug ---
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# --- Terminal geometry: 800x480 / 8x16 Terminus = 100 cols x 30 rows ---
+# (Kconfig options added to valdanylchuk/breezy_term; defaults stay 128x37.)
+CONFIG_VTERM_COLS=100
+CONFIG_VTERM_ROWS=30
+
+# --- ELF loader ---
+# Built-in libc + ESP-IDF symbol tables (default on) are correct for the P4,
+# so downloaded ELF apps resolve standard symbols out of the box. Enable
+# CONFIG_ELF_LOADER_CUSTOMER_SYMBOLS only if you add a P4 customer table
+# (see main/all_my_symbols.c.p4-template).
+CONFIG_ELF_LOADER_LOAD_PSRAM=y
+
+# --- Main/system task headroom ---
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=6144
+
+#
+# ============================================================
+#  Phase 2 networking: WiFi radio lives on the C6, reached over
+#  esp-hosted (SDIO) + esp_wifi_remote, exactly like the launcher.
+#  These let the project link the networking commands now; the
+#  radio is only brought up when you call the bring-up sequence.
+# ============================================================
+#
+
+# esp-hosted SDIO transport to the C6 (Tanmatsu pin map, from the launcher)
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CMD_SLOT_1=16
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CLK_SLOT_1=17
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D0_SLOT_1=18
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D1_4BIT_BUS_SLOT_1=19
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D2_4BIT_BUS_SLOT_1=20
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D3_4BIT_BUS_SLOT_1=21
+CONFIG_ESP_HOSTED_SDIO_RESET_SLAVE_USING_CALLBACK=y
+CONFIG_ESP_HOSTED_SLAVE_RESET_ONLY_IF_NECESSARY=y
+CONFIG_ESP_HOSTED_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE=n
+CONFIG_SLAVE_IDF_TARGET_ESP32C6=y
+
+# HTTP / TLS knobs used by breezybox's eget/httpd commands
+CONFIG_ESP_TLS_INSECURE=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=512
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y

@@ -11,8 +11,19 @@
 #define VTERM_COUNT     1   // Single VT for systems without PSRAM
 #endif
 
+/* Grid dimensions are configurable via Kconfig (CONFIG_VTERM_COLS/ROWS).
+ * Defaults preserve the original 128x37 for existing boards (e.g. the S3 demo). */
+#ifdef CONFIG_VTERM_COLS
+#define VTERM_COLS      CONFIG_VTERM_COLS
+#else
 #define VTERM_COLS      128
+#endif
+
+#ifdef CONFIG_VTERM_ROWS
+#define VTERM_ROWS      CONFIG_VTERM_ROWS
+#else
 #define VTERM_ROWS      37
+#endif
 
 #define VTERM_BLACK     0
 #define VTERM_RED       1
