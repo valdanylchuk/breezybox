@@ -21,10 +21,26 @@ CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC=y
 CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC_SIZE=0x10
 
 # --- PSRAM (P4 / Tanmatsu) ---
+# IMPORTANT: on the P4 the 200 MHz PSRAM speed is gated behind
+# IDF_EXPERIMENTAL_FEATURES. Without it the SPIRAM_SPEED_200M choice is
+# silently dropped and Kconfig falls back to SPIRAM_SPEED_20M -- far too slow
+# to feed the MIPI-DSI DPI, which then logs "can't fetch data from external
+# memory fast enough, underrun happens" and shows garbage. The native launcher
+# enables this for the same reason.
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=65536
 CONFIG_SPIRAM_PRE_CONFIGURE_MEMORY_PROTECTION=n
+
+# --- Display robustness (mirror the launcher) ---
+# Keep the DSI ISR in IRAM so framebuffer transfers aren't stalled by flash
+# cache misses, use QIO flash, and link the Winbond flash driver (the chip on
+# the Tanmatsu) to silence the "winbond detected but related driver is not
+# linked" warning seen at boot.
+CONFIG_LCD_DSI_ISR_IRAM_SAFE=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_SPI_FLASH_SUPPORT_WINBOND_CHIP=y
 
 # --- Console: keep a parallel USB-Serial-JTAG console for logs/debug ---
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
