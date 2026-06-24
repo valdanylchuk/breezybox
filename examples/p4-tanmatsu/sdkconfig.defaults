@@ -54,8 +54,9 @@ CONFIG_VTERM_ROWS=30
 # Built-in libc + ESP-IDF symbol tables (default on) are correct for the P4,
 # so downloaded ELF apps resolve standard symbols out of the box. Enable
 # CONFIG_ELF_LOADER_CUSTOMER_SYMBOLS only if you add a P4 customer table
-# (see main/all_my_symbols.c.p4-template).
+# (see main/all_my_symbols.c).
 CONFIG_ELF_LOADER_LOAD_PSRAM=y
+CONFIG_ELF_LOADER_CUSTOMER_SYMBOLS
 
 # --- Main/system task headroom ---
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
