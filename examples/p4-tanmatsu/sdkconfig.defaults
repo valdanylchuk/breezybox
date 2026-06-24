@@ -13,6 +13,13 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # --- Board support package (Tanmatsu) ---
 CONFIG_BSP_TARGET_TANMATSU=y
 
+# badge-bsp's restart_to_launcher stub clears the appfs magic in the custom
+# RTC retain area, so it needs the same reserved-RTC layout as the launcher.
+# Enabling CUSTOM_RESERVE_RTC also selects BOOTLOADER_RESERVE_RTC_MEM, which
+# exposes bootloader_common_get_rtc_retain_mem() and the rtc_retain_mem_t.custom field.
+CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC=y
+CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC_SIZE=0x10
+
 # --- PSRAM (P4 / Tanmatsu) ---
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SPEED_200M=y

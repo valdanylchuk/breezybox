@@ -1,0 +1,443 @@
+dependencies:
+  badgeteam/badge-bsp:
+    component_hash: e6ad3e75b49ea5015090487da2ac5cccfcaeb2efad388fbf9bd0a4841bed5c4b
+    dependencies:
+    - name: badgeteam/mch2022-rp2040
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32
+      version: ^0.0.2
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: espressif/esp_lcd_ili9341
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^2.0.2
+    - name: espressif/led_strip
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^3.0.3
+    - name: idf
+      require: private
+      version: '>=5.3'
+    - name: nicolaielectronics/bmi270
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.0.1
+    - name: nicolaielectronics/es8156
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.0.3
+    - name: nicolaielectronics/mipi_dsi_abstraction
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32p4
+      version: ^0.3.3
+    - name: nicolaielectronics/mpr121
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.0.2
+    - name: nicolaielectronics/ssd1619
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.0.1
+    - name: nicolaielectronics/tanmatsu_coprocessor
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32p4
+      version: ^0.8.0
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32p4
+    - esp32c6
+    - esp32c3
+    - esp32s3
+    version: 1.0.0
+  badgeteam/custom-certificates:
+    component_hash: fe511ea8c8301bfc0a148d4458d5f2f3129ddc0d60c0fb4e8c720e256f7e73ce
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.0
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
+  espressif/elf_loader:
+    component_hash: 010565784683f41ead362d90f97b32d1e46bf8c325d08664eb704109d612297f
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32c6
+    - esp32c61
+    - esp32p4
+    version: 1.3.1
+  espressif/eppp_link:
+    component_hash: 04f7f31868b8ae6014c96132740a192d09611a6e46aaa7038c865ffc7e26b38f
+    dependencies:
+    - name: espressif/esp_serial_slave_link
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.1.0
+    - name: idf
+      require: private
+      version: '>=5.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.5
+  espressif/esp_lcd_ek79007:
+    component_hash: 8005700b7f10c7136b6e2a3f19a48f972aa1d13ed107ed298574e8d24d17ea83
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 1.0.4
+  espressif/esp_lcd_ili9341:
+    component_hash: 0baab584e0e490511d6bdbae6aa045130424d732ecdaad6cd1d3bd3c0abe2c30
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 2.0.2
+  espressif/esp_lcd_ili9881c:
+    component_hash: 0288df12755c95d406ccea245a427595f314df0b14a61846286d926ea6f3698e
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 1.1.0
+  espressif/esp_lcd_lt8912b:
+    component_hash: d78113f9330e8cff5e91bb2faa1bc450a59e7235438b7d5558abe739f7ecda4b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.1.3
+  espressif/esp_lcd_st7701:
+    component_hash: 0b11e8733e51e12da83003b9d475777eaf47bfbdce01379879bd2504d14f4f83
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>5.0.4,!=5.1.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32s3
+    - esp32p4
+    version: 1.1.5
+  espressif/esp_serial_slave_link:
+    component_hash: ac1776806de0a6e371c84e87898bb983e19ce62aa7f1e2e5c4a3b0234a575d2c
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.2
+  espressif/led_strip:
+    component_hash: 28621486f77229aaf81c71f5e15d6fbf36c2949cf11094e07090593e659e7639
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 3.0.3
+  espressif/wifi_remote_over_eppp:
+    component_hash: 06d8bc15348bbd21f1390daace36ed5adcf6026c93c5b69decc55fa04df2711a
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    - name: espressif/eppp_link
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.3.2
+  espressif/zlib:
+    component_hash: 64ea2fd6754c5a05951f1ddb312ac835cd782e68cb5bd9dfcd1c3a107c8fbfbc
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.3.2
+  idf:
+    source:
+      type: idf
+    version: 5.5.0
+  joltwallet/littlefs:
+    component_hash: 01faa388c6305fe77fd6962cda6171e753033458f24f8fae9e9d932e3d817a4c
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.22.1
+  nicolaielectronics/bmi270:
+    component_hash: 4eba2761d6fc2ea032c3e5321e594680f0a47a53ae76323a129628e16af38a0c
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.1
+  nicolaielectronics/es8156:
+    component_hash: 2cf4431df1d0b0867cd1eefa0a1fbc77dcf5347e9aa81446c95d5e3175c9bd63
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.0.3
+  nicolaielectronics/esp-hosted-tanmatsu:
+    component_hash: 23dddc20e6ef030b811d70423c2cd17c0d29e792464bdc7c40130fca75efb913
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 2.12.3
+  nicolaielectronics/esp-wifi-remote-tanmatsu:
+    component_hash: 727ff301054ea14ce2482ffc12154a64b4ac06d2aadd70621d3bb62ccfdebefa
+    dependencies:
+    - name: espressif/wifi_remote_over_eppp
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.1'
+    - name: idf
+      require: private
+      version: '>=5.3'
+    - name: nicolaielectronics/esp-hosted-tanmatsu
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target in [esp32h2, esp32p4]
+      version: '>=2.12.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.4.2
+  nicolaielectronics/mipi_dsi_abstraction:
+    component_hash: 730040c77abc1f6bb5cf117405c9963e60159e807a5eea7d1750a2a48ccaaf89
+    dependencies:
+    - name: espressif/esp_lcd_st7701
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.1.1
+    - name: idf
+      require: private
+      version: '>=5.4'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: espressif/esp_lcd_ek79007
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.0.0
+    - name: espressif/esp_lcd_ili9881c
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.0.0
+    - name: espressif/esp_lcd_lt8912b
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^0.1.1
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 0.3.3
+  nicolaielectronics/mpr121:
+    component_hash: 93853032af10158cbb8714c9f487b1afec9f182b3826d95906d79704858f5b1b
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.0.2
+  nicolaielectronics/ssd1619:
+    component_hash: de439a13c0e052ffe5fb161635bc6b2b6e504145042a4694fec4399462468003
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.0.1
+  nicolaielectronics/tanmatsu-wifi:
+    component_hash: 6abd4560becbe220bd03eb25c33fd877dc36f60c9fc4de619021bbe8807cea8d
+    dependencies:
+    - name: badgeteam/badge-bsp
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.3.0'
+    - name: badgeteam/custom-certificates
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=1.0.0'
+    - name: idf
+      require: private
+      version: '>=5.4.0'
+    - name: nicolaielectronics/esp-hosted-tanmatsu
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32p4
+      version: ^2.12.3
+    - name: nicolaielectronics/esp-wifi-remote-tanmatsu
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32p4
+      version: ^1.4.2
+    - name: nicolaielectronics/wifi-manager
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.1.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.2.0
+  nicolaielectronics/tanmatsu_coprocessor:
+    component_hash: 6942f39750ce5d30415bfa25eb4d544fb54f4c189d38a5e505fd256ea5a9d55b
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 0.8.0
+  nicolaielectronics/wifi-manager:
+    component_hash: a5a8fb59d367a5f37ee3cfa6bc2615eafa22a7bf620739cd5bb9b571c2b3c871
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.3.0
+  valdanylchuk/breezy_term:
+    dependencies:
+    - name: idf
+      version: '>=5.0'
+    source:
+      path: /Users/valentyn/Projects/esp/breezybox/src/components/breezy_term
+      type: local
+    targets:
+    - esp32
+    - esp32c2
+    - esp32c3
+    - esp32c5
+    - esp32c6
+    - esp32c61
+    - esp32h2
+    - esp32h21
+    - esp32h4
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 1.0.2
+direct_dependencies:
+- badgeteam/badge-bsp
+- espressif/elf_loader
+- espressif/zlib
+- idf
+- joltwallet/littlefs
+- nicolaielectronics/tanmatsu-wifi
+- nicolaielectronics/wifi-manager
+- valdanylchuk/breezy_term
+manifest_hash: 40dcda1de8012ffce0fde760e5d55d38d7f7115cf94c474bc5ff31f9c8b08f8f
+target: esp32p4
+version: 2.0.0
