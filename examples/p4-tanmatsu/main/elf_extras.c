@@ -11,10 +11,16 @@
  *                       --gc-sections keeps it (nothing in firmware calls it).
  *   - __floatundidf     libgcc soft-float helper (termbench); usually already
  *                       linked, anchored for safety.
+ *   - bt_keyboard_*     Tanmatsu game-input shim (tanmatsu_keyboard.c). Games
+ *                       like ccleste link against the BreezyBox bt_keyboard_*
+ *                       polling API; nothing in the firmware calls it, so it is
+ *                       anchored here to survive --gc-sections.
  *
  * After changing exports here, rebuild and regenerate the ELF customer symbol
  * table (see Readme "ELF apps on P4").
  */
+
+#include <stdint.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -44,6 +50,11 @@ void vTaskDelayUntil(TickType_t *pxPreviousWakeTime, TickType_t xTimeIncrement)
 /* libgcc: unsigned 64-bit -> double (some apps' integer/double math). */
 extern double __floatundidf(unsigned long long);
 
+/* Tanmatsu game-input shim (tanmatsu_keyboard.c). */
+extern int     bt_keyboard_is_pressed(uint8_t keycode);
+extern uint8_t bt_keyboard_get_modifiers(void);
+extern int     bt_keyboard_connected(void);
+
 /* Volatile sink: volatile stores can't be optimized away, so the address-of
  * references below are emitted and the symbols are retained under -O2. */
 static volatile const void *s_export_sink;
@@ -58,4 +69,7 @@ void breezy_p4_export_symbols(void)
     s_export_sink = (const void *)vTaskDelayUntil;
     s_export_sink = (const void *)my_display_refresh_palette;
     s_export_sink = (const void *)__floatundidf;
+    s_export_sink = (const void *)bt_keyboard_is_pressed;
+    s_export_sink = (const void *)bt_keyboard_get_modifiers;
+    s_export_sink = (const void *)bt_keyboard_connected;
 }

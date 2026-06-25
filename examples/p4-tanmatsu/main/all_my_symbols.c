@@ -17,6 +17,9 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wbuiltin-declaration-mismatch"
+extern int bt_keyboard_is_pressed;
+extern int bt_keyboard_get_modifiers;
+extern int bt_keyboard_connected;
 extern int hmac_hal_clean;
 extern int pmu_sleep_enable_regdma_backup;
 extern int heap_caps_realloc;
@@ -4076,6 +4079,9 @@ extern int mbedtls_rsa_pkcs1_sign;
 /* Available ELF symbols table: g_customer_elfsyms */
 
 const struct esp_elfsym g_customer_elfsyms[] = {
+    ESP_ELFSYM_EXPORT(bt_keyboard_is_pressed),
+    ESP_ELFSYM_EXPORT(bt_keyboard_get_modifiers),
+    ESP_ELFSYM_EXPORT(bt_keyboard_connected),
     ESP_ELFSYM_EXPORT(hmac_hal_clean),
     ESP_ELFSYM_EXPORT(pmu_sleep_enable_regdma_backup),
     ESP_ELFSYM_EXPORT(heap_caps_realloc),
