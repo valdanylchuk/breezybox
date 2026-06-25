@@ -45,23 +45,8 @@ static uint8_t s_font[256][TANMATSU_FONT_H];
 static int     s_pw = 0, s_ph = 0;     /* physical panel pixels (native) */
 static int     s_lw = 0, s_lh = 0;     /* logical (rotated) canvas pixels */
 static int     s_rot = 270;            /* default rotation from the BSP */
-static int     s_bpp = 3;              /* bytes per pixel */
-static bool    s_is_565 = false;
-static uint8_t *s_fb = NULL;
-
-/* Map a logical landscape pixel to its byte offset in the physical framebuffer.
- * Handles the four BSP rotations; 270 (PAX_O_ROT_CW) is the Tanmatsu default. */
-static inline uint8_t *phys_px(int lx, int ly)
-{
-    int px, py;
-    switch (s_rot) {
-        case 90:   px = ly;            py = s_ph - 1 - lx;  break;
-        case 180:  px = s_pw - 1 - lx; py = s_ph - 1 - ly;  break;
-        case 270:  px = s_pw - 1 - ly; py = lx;             break;
-        default:   px = lx;            py = ly;             break;  /* 0 */
-    }
-    return s_fb + ((size_t)py * s_pw + px) * s_bpp;
-}
+static int     s_bpp = 2;              /* bytes per pixel (RGB565) */
+static uint8_t *s_fb = NULL;           /* logical (upright) RGB565 text canvas */
 
 /* --- Source cell buffer --- */
 static const lcd_cell_t *s_cells = NULL;
@@ -80,19 +65,15 @@ static const uint16_t s_cga565[16] = {
     0x52AA, 0x52BF, 0x57EA, 0x57FF, 0xFAAA, 0xFABF, 0xFFE0, 0xFFFF,
 };
 static uint16_t s_pal565[16];
-static uint8_t  s_out888[16][3];  /* pre-ordered output bytes per palette index */
 static uint16_t s_out565[16];     /* pre-ordered 16-bit value per palette index */
 static bool     s_endian_big = false;
 
-static inline uint8_t exp5(uint8_t v5) { return (uint8_t)((v5 * 255 + 15) / 31); }
-static inline uint8_t exp6(uint8_t v6) { return (uint8_t)((v6 * 255 + 31) / 63); }
-
 /* --- Graphics mode (8bpp indexed) ---
  *
- * An ELF app draws into s_gfx_fb (s_gw x s_gh, one byte = palette index). The
- * render task upscales it by an integer factor, palettizes through the 256-color
- * VGA palette and rotates it into the native panel framebuffer (s_fb), exactly
- * like the text path. Black borders (centered fit) are painted once on entry.
+ * An ELF app draws into s_gfx_fb (s_gw x s_gh, one byte = palette index). Each
+ * frame it is palettized through the 256-color VGA palette into an RGB565 buffer,
+ * which the PPA scales + rotates straight into a scanout buffer (see gfx_present).
+ * Black borders (centered fit) are painted once on entry.
  */
 static screen_mode_t s_screen_mode = SM_TEXT;
 static uint8_t      *s_gfx_fb = NULL;
@@ -101,7 +82,6 @@ static int           s_gscale = 1;         /* integer upscale factor */
 static int           s_gmx = 0, s_gmy = 0; /* centering margins (logical px) */
 
 static uint16_t s_vga_pal[256];            /* RGB565 palette */
-static uint8_t  s_vga_out888[256][3];      /* pre-ordered output bytes */
 static uint16_t s_vga_out565[256];         /* pre-ordered 16-bit value */
 
 /* Direct DPI scanout framebuffers + PPA: in graphics mode we palette-convert the
@@ -123,20 +103,11 @@ static const rgb_display_callbacks_t *s_cbs = NULL;
 /* Volatile sink for the ELF export anchor (see tanmatsu_lcd_init). */
 static volatile const void *s_export_sink;
 
-/* Rebuild the output-byte LUT for one VGA palette entry (honours endianness). */
+/* Rebuild the RGB565 output LUT for one VGA palette entry (honours endianness). */
 static void vga_out_entry(int i)
 {
     uint16_t c = s_vga_pal[i];
-    uint8_t r = exp5((c >> 11) & 0x1F);
-    uint8_t g = exp6((c >> 5) & 0x3F);
-    uint8_t b = exp5(c & 0x1F);
-    if (s_endian_big) {            /* BGR byte order */
-        s_vga_out888[i][0] = b; s_vga_out888[i][1] = g; s_vga_out888[i][2] = r;
-        s_vga_out565[i] = (uint16_t)((c << 8) | (c >> 8));
-    } else {                       /* RGB byte order */
-        s_vga_out888[i][0] = r; s_vga_out888[i][1] = g; s_vga_out888[i][2] = b;
-        s_vga_out565[i] = c;
-    }
+    s_vga_out565[i] = s_endian_big ? (uint16_t)((c << 8) | (c >> 8)) : c;
 }
 
 static void vga_rebuild_out(void)
@@ -170,16 +141,7 @@ static void rebuild_palette_out(void)
 {
     for (int i = 0; i < 16; i++) {
         uint16_t c = s_pal565[i];
-        uint8_t r = exp5((c >> 11) & 0x1F);
-        uint8_t g = exp6((c >> 5) & 0x3F);
-        uint8_t b = exp5(c & 0x1F);
-        if (s_endian_big) {            /* BGR byte order */
-            s_out888[i][0] = b; s_out888[i][1] = g; s_out888[i][2] = r;
-            s_out565[i] = (uint16_t)((c << 8) | (c >> 8));
-        } else {                       /* RGB byte order */
-            s_out888[i][0] = r; s_out888[i][1] = g; s_out888[i][2] = b;
-            s_out565[i] = c;
-        }
+        s_out565[i] = s_endian_big ? (uint16_t)((c << 8) | (c >> 8)) : c;
     }
 }
 
@@ -213,17 +175,17 @@ void tanmatsu_lcd_get_text_size(int *cols, int *rows)
     if (rows) *rows = s_lh / TANMATSU_FONT_H;
 }
 
-/* Render one full frame into s_fb. */
+/* Render one full frame into the upright RGB565 canvas (s_fb). The PPA rotates
+ * it onto the panel at present time, so here we just write logical pixels. */
 static void render_frame(bool blink_on)
 {
     const lcd_cell_t *cells = s_cells;
     if (!cells || !s_fb) return;
 
+    uint16_t *dst = (uint16_t *)s_fb;
     const int cols = s_cols, rows = s_rows;
     const int cur_col = s_cur_col, cur_row = s_cur_row;
 
-    /* Iterate in logical (landscape) coordinates; phys_px() rotates each pixel
-     * into the native portrait framebuffer. */
     for (int ty = 0; ty < rows; ty++) {
         int ly0 = ty * TANMATSU_FONT_H;
         if (ly0 >= s_lh) break;
@@ -231,6 +193,7 @@ static void render_frame(bool blink_on)
         for (int gy = 0; gy < TANMATSU_FONT_H; gy++) {
             int ly = ly0 + gy;
             if (ly >= s_lh) break;
+            uint16_t *drow = &dst[(size_t)ly * s_lw];
 
             for (int tx = 0; tx < cols; tx++) {
                 int lx0 = tx * TANMATSU_FONT_W;
@@ -250,61 +213,35 @@ static void render_frame(bool blink_on)
                     int lx = lx0 + bit;
                     if (lx >= s_lw) break;
                     bool on = cursor_line || (glyph & (0x80 >> bit));
-                    uint8_t idx = on ? fg : bg;
-                    uint8_t *p = phys_px(lx, ly);
-                    if (s_is_565) {
-                        uint16_t v = s_out565[idx];
-                        p[0] = (uint8_t)v;
-                        p[1] = (uint8_t)(v >> 8);
-                    } else {
-                        p[0] = s_out888[idx][0];
-                        p[1] = s_out888[idx][1];
-                        p[2] = s_out888[idx][2];
-                    }
+                    drow[lx] = s_out565[on ? fg : bg];
                 }
             }
         }
     }
 }
 
-/* Present one graphics frame: palette-convert the indexed buffer to RGB565, then
- * let the PPA scale + rotate it into a scanout framebuffer and flip to it.
- * The rotation is 90 deg CW (panel mounted at ROTATION_270); PPA angles are CCW,
- * so 90 CW == ANGLE_270. Only the centered image block is written each frame; the
- * black borders were painted into both framebuffers once on graphics-mode entry. */
-static void gfx_present(void)
+/* Shared presentation for both text and graphics: take an upright RGB565 image
+ * (sw x sh logical pixels), scale it by `scale` and place it at logical margin
+ * (mx,my), and let the PPA rotate it into a scanout buffer, then flip to that
+ * buffer. The panel is mounted at ROTATION_270, i.e. a 90 deg CW rotation; PPA
+ * angles are CCW, so 90 CW == ANGLE_270. The rotated, scaled block lands at
+ * (s_pw - sh*scale - my, mx) in the portrait framebuffer. */
+static void present_rotated(const uint16_t *src, int sw, int sh,
+                            int scale, int mx, int my)
 {
-    const uint8_t *src = s_gfx_fb;
-    if (!src || !s_gfx_rgb || !s_ppa || s_dpi_fb_n == 0) return;
-
-    /* Indexed -> RGB565 (small, sequential; the heavy lifting is the PPA below). */
-    const int n = s_gw * s_gh;
-    for (int i = 0; i < n; i++) s_gfx_rgb[i] = s_vga_out565[src[i]];
+    if (!src || !s_ppa || s_dpi_fb_n == 0) return;
 
     void *fb = s_dpi_fb[s_draw_idx];
     ppa_srm_oper_config_t cfg = {
-        .in = {
-            .buffer         = s_gfx_rgb,
-            .pic_w          = s_gw,
-            .pic_h          = s_gh,
-            .block_w        = s_gw,
-            .block_h        = s_gh,
-            .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
-        },
-        .out = {
-            .buffer         = fb,
-            .buffer_size    = (uint32_t)s_pw * s_ph * s_bpp,
-            .pic_w          = s_pw,
-            .pic_h          = s_ph,
-            /* Rotated block lands at (s_pw - gh*scale - my, mx) in the portrait FB. */
-            .block_offset_x = s_pw - s_gh * s_gscale - s_gmy,
-            .block_offset_y = s_gmx,
-            .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
-        },
+        .in  = { .buffer = src, .pic_w = sw, .pic_h = sh,
+                 .block_w = sw, .block_h = sh, .srm_cm = PPA_SRM_COLOR_MODE_RGB565 },
+        .out = { .buffer = fb, .buffer_size = (uint32_t)s_pw * s_ph * s_bpp,
+                 .pic_w = s_pw, .pic_h = s_ph,
+                 .block_offset_x = s_pw - sh * scale - my, .block_offset_y = mx,
+                 .srm_cm = PPA_SRM_COLOR_MODE_RGB565 },
         .rotation_angle = PPA_SRM_ROTATION_ANGLE_270,
-        .scale_x        = (float)s_gscale,
-        .scale_y        = (float)s_gscale,
-        .mode           = PPA_TRANS_MODE_BLOCKING,
+        .scale_x = (float)scale, .scale_y = (float)scale,
+        .mode = PPA_TRANS_MODE_BLOCKING,
     };
     if (ppa_do_scale_rotate_mirror(s_ppa, &cfg) != ESP_OK) return;
 
@@ -312,6 +249,21 @@ static void gfx_present(void)
      * (cache write-back only, no copy). Then render into the other buffer next. */
     bsp_display_blit(0, 0, s_pw, s_ph, fb);
     if (s_dpi_fb_n > 1) s_draw_idx ^= 1;
+}
+
+/* Present one graphics frame: palette-convert the indexed buffer to RGB565, then
+ * present it scaled + centered. The black borders around the centered image were
+ * painted into both framebuffers once on graphics-mode entry. */
+static void gfx_present(void)
+{
+    const uint8_t *src = s_gfx_fb;
+    if (!src || !s_gfx_rgb) return;
+
+    /* Indexed -> RGB565 (small, sequential; the heavy lifting is the PPA). */
+    const int n = s_gw * s_gh;
+    for (int i = 0; i < n; i++) s_gfx_rgb[i] = s_vga_out565[src[i]];
+
+    present_rotated(s_gfx_rgb, s_gw, s_gh, s_gscale, s_gmx, s_gmy);
 }
 
 /* Paint every owned scanout buffer black and write it back to PSRAM, so the
@@ -350,10 +302,8 @@ static void render_task(void *arg)
             s_dirty = false;
             s_last_blink = blink;
             render_frame(blink);
-            esp_err_t err = bsp_display_blit(0, 0, s_pw, s_ph, s_fb);
-            if (err != ESP_OK) {
-                ESP_LOGW(TAG, "blit failed: %s", esp_err_to_name(err));
-            }
+            /* Full-frame text canvas: scale 1, no margin -> fills the panel. */
+            present_rotated((const uint16_t *)s_fb, s_lw, s_lh, 1, 0, 0);
         }
         vTaskDelay(pdMS_TO_TICKS(REFRESH_MS));
     }
@@ -388,12 +338,10 @@ esp_err_t tanmatsu_lcd_init(void)
         s_lw = s_pw; s_lh = s_ph;
     }
 
-    /* We requested 24_888RGB in app_main; handle 16-bit panels too just in case. */
-    if (fmt == BSP_DISPLAY_COLOR_FORMAT_24_888RGB) {
-        s_bpp = 3; s_is_565 = false;
-    } else {
-        /* Assume a 16-bit RGB565 panel. */
-        s_bpp = 2; s_is_565 = true;
+    /* This backend renders in RGB565 throughout (the PPA present path is RGB565),
+     * matching the 16_565RGB format requested in app_main. */
+    s_bpp = 2;
+    if (fmt != BSP_DISPLAY_COLOR_FORMAT_16_565RGB) {
         ESP_LOGW(TAG, "Unexpected color format %d, assuming RGB565", (int)fmt);
     }
 
@@ -449,8 +397,9 @@ esp_err_t tanmatsu_lcd_init(void)
         s_export_sink = anchors[i];
     }
 
-    /* Framebuffer in PSRAM (sized to the native panel, not the logical canvas). */
-    size_t fb_size = (size_t)s_pw * s_ph * s_bpp;
+    /* Upright RGB565 text canvas in PSRAM (s_lw*s_lh == s_pw*s_ph bytes); the PPA
+     * rotates it onto the panel at present time. */
+    size_t fb_size = (size_t)s_lw * s_lh * s_bpp;
     s_fb = heap_caps_malloc(fb_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s_fb) {
         s_fb = heap_caps_malloc(fb_size, MALLOC_CAP_8BIT);  /* fallback */
