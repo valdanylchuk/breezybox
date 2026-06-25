@@ -136,8 +136,11 @@ void app_main(void)
     /* Bring up Tanmatsu hardware: display, keyboard, power, C6 link. */
     const bsp_configuration_t bsp_configuration = {
         .display = {
-            .requested_color_format = BSP_DISPLAY_COLOR_FORMAT_24_888RGB,
-            .num_fbs                = 1,
+            /* RGB565 + double buffering: the P4 backend renders graphics frames
+             * straight into the DPI scanout buffers (PPA scale/rotate) and flips,
+             * so we want two 16bpp framebuffers rather than one 24bpp copy target. */
+            .requested_color_format = BSP_DISPLAY_COLOR_FORMAT_16_565RGB,
+            .num_fbs                = 2,
         },
     };
     ESP_ERROR_CHECK(bsp_device_initialize(&bsp_configuration));

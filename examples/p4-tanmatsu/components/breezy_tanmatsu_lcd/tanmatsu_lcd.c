@@ -17,6 +17,9 @@
 #include "esp_log.h"
 
 #include "bsp/display.h"
+#include "esp_lcd_mipi_dsi.h"   /* esp_lcd_dpi_panel_get_frame_buffer */
+#include "esp_cache.h"          /* esp_cache_msync (border write-back) */
+#include "driver/ppa.h"         /* HW scale + rotate for graphics mode */
 
 #include "rgb_display.h"   /* graphics-mode ABI exposed to ELF apps */
 #include "rgb_gfx.h"
@@ -100,6 +103,17 @@ static int           s_gmx = 0, s_gmy = 0; /* centering margins (logical px) */
 static uint16_t s_vga_pal[256];            /* RGB565 palette */
 static uint8_t  s_vga_out888[256][3];      /* pre-ordered output bytes */
 static uint16_t s_vga_out565[256];         /* pre-ordered 16-bit value */
+
+/* Direct DPI scanout framebuffers + PPA: in graphics mode we palette-convert the
+ * small indexed buffer to RGB565, then let the PPA scale + rotate it straight
+ * into a scanout framebuffer (no per-pixel CPU rotation, no full-frame copy).
+ * Two framebuffers let us render the back buffer while the panel scans the front. */
+static esp_lcd_panel_handle_t s_panel = NULL;
+static void               *s_dpi_fb[2] = { NULL, NULL };
+static int                 s_dpi_fb_n  = 0;     /* scanout framebuffers we own */
+static int                 s_draw_idx  = 0;     /* back buffer to render next */
+static ppa_client_handle_t s_ppa       = NULL;
+static uint16_t           *s_gfx_rgb   = NULL;  /* palette-converted RGB565 scratch */
 
 static SemaphoreHandle_t s_vsync_sem = NULL;
 static volatile bool     s_vsync_wait = false;
@@ -253,39 +267,63 @@ static void render_frame(bool blink_on)
     }
 }
 
-/* Upscale + palettize the indexed graphics framebuffer into s_fb (rotated). */
-static void render_gfx_frame(void)
+/* Present one graphics frame: palette-convert the indexed buffer to RGB565, then
+ * let the PPA scale + rotate it into a scanout framebuffer and flip to it.
+ * The rotation is 90 deg CW (panel mounted at ROTATION_270); PPA angles are CCW,
+ * so 90 CW == ANGLE_270. Only the centered image block is written each frame; the
+ * black borders were painted into both framebuffers once on graphics-mode entry. */
+static void gfx_present(void)
 {
-    const uint8_t *fb = s_gfx_fb;
-    if (!fb || !s_fb) return;
+    const uint8_t *src = s_gfx_fb;
+    if (!src || !s_gfx_rgb || !s_ppa || s_dpi_fb_n == 0) return;
 
-    const int gw = s_gw, gh = s_gh, scale = s_gscale, mx = s_gmx, my = s_gmy;
+    /* Indexed -> RGB565 (small, sequential; the heavy lifting is the PPA below). */
+    const int n = s_gw * s_gh;
+    for (int i = 0; i < n; i++) s_gfx_rgb[i] = s_vga_out565[src[i]];
 
-    for (int sy = 0; sy < gh; sy++) {
-        const uint8_t *srow = &fb[(size_t)sy * gw];
-        for (int ry = 0; ry < scale; ry++) {
-            int ly = my + sy * scale + ry;
-            if (ly < 0 || ly >= s_lh) continue;
+    void *fb = s_dpi_fb[s_draw_idx];
+    ppa_srm_oper_config_t cfg = {
+        .in = {
+            .buffer         = s_gfx_rgb,
+            .pic_w          = s_gw,
+            .pic_h          = s_gh,
+            .block_w        = s_gw,
+            .block_h        = s_gh,
+            .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
+        },
+        .out = {
+            .buffer         = fb,
+            .buffer_size    = (uint32_t)s_pw * s_ph * s_bpp,
+            .pic_w          = s_pw,
+            .pic_h          = s_ph,
+            /* Rotated block lands at (s_pw - gh*scale - my, mx) in the portrait FB. */
+            .block_offset_x = s_pw - s_gh * s_gscale - s_gmy,
+            .block_offset_y = s_gmx,
+            .srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
+        },
+        .rotation_angle = PPA_SRM_ROTATION_ANGLE_270,
+        .scale_x        = (float)s_gscale,
+        .scale_y        = (float)s_gscale,
+        .mode           = PPA_TRANS_MODE_BLOCKING,
+    };
+    if (ppa_do_scale_rotate_mirror(s_ppa, &cfg) != ESP_OK) return;
 
-            for (int sx = 0; sx < gw; sx++) {
-                uint8_t idx = srow[sx];
-                int lx0 = mx + sx * scale;
-                for (int rx = 0; rx < scale; rx++) {
-                    int lx = lx0 + rx;
-                    if (lx < 0 || lx >= s_lw) continue;
-                    uint8_t *p = phys_px(lx, ly);
-                    if (s_is_565) {
-                        uint16_t v = s_vga_out565[idx];
-                        p[0] = (uint8_t)v;
-                        p[1] = (uint8_t)(v >> 8);
-                    } else {
-                        p[0] = s_vga_out888[idx][0];
-                        p[1] = s_vga_out888[idx][1];
-                        p[2] = s_vga_out888[idx][2];
-                    }
-                }
-            }
-        }
+    /* Flip: blit with an in-FB pointer makes the DPI driver scan out this buffer
+     * (cache write-back only, no copy). Then render into the other buffer next. */
+    bsp_display_blit(0, 0, s_pw, s_ph, fb);
+    if (s_dpi_fb_n > 1) s_draw_idx ^= 1;
+}
+
+/* Paint every owned scanout buffer black and write it back to PSRAM, so the
+ * borders around the centered image stay black no matter which buffer is shown.
+ * Called once on graphics-mode entry; per-frame PPA only touches the image. */
+static void dpi_fbs_clear_black(void)
+{
+    size_t sz = (size_t)s_pw * s_ph * s_bpp;
+    for (int i = 0; i < s_dpi_fb_n; i++) {
+        if (!s_dpi_fb[i]) continue;
+        memset(s_dpi_fb[i], 0, sz);
+        esp_cache_msync(s_dpi_fb[i], sz, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
 }
 
@@ -295,8 +333,7 @@ static void render_task(void *arg)
     for (;;) {
         /* Graphics mode: redraw every tick (apps animate) + emulate vsync. */
         if (s_screen_mode != SM_TEXT) {
-            render_gfx_frame();
-            bsp_display_blit(0, 0, s_pw, s_ph, s_fb);
+            gfx_present();
             if (s_vsync_wait && s_vsync_sem) {
                 s_vsync_wait = false;
                 xSemaphoreGive(s_vsync_sem);
@@ -374,6 +411,23 @@ esp_err_t tanmatsu_lcd_init(void)
 
     /* Vsync emulation: render task signals after each graphics-mode blit. */
     s_vsync_sem = xSemaphoreCreateBinary();
+
+    /* Own the DPI scanout framebuffers + a PPA client for graphics mode: the
+     * graphics path renders straight into these buffers (HW scale + rotate),
+     * removing the per-pixel software rotation and the full-frame copy. */
+    if (bsp_display_get_panel(&s_panel) == ESP_OK && s_panel) {
+        if (esp_lcd_dpi_panel_get_frame_buffer(s_panel, 2, &s_dpi_fb[0], &s_dpi_fb[1]) == ESP_OK) {
+            s_dpi_fb_n = 2;
+        } else if (esp_lcd_dpi_panel_get_frame_buffer(s_panel, 1, &s_dpi_fb[0]) == ESP_OK) {
+            s_dpi_fb_n = 1;
+        }
+    }
+    ppa_client_config_t ppa_cfg = { .oper_type = PPA_OPERATION_SRM };
+    if (ppa_register_client(&ppa_cfg, &s_ppa) != ESP_OK) {
+        s_ppa = NULL;
+        ESP_LOGW(TAG, "PPA client unavailable; graphics mode disabled");
+    }
+    ESP_LOGI(TAG, "DPI scanout buffers: %d, PPA: %s", s_dpi_fb_n, s_ppa ? "ready" : "none");
 
     /* Force-link the graphics-mode ABI so the ELF loader can resolve it.
      * Each address is stored through a volatile sink: volatile writes cannot be
@@ -454,7 +508,15 @@ static int gfx_setup_mode(screen_mode_t mode)
     if (!fb) fb = heap_caps_malloc((size_t)w * h, MALLOC_CAP_8BIT);
     if (!fb) return -1;
     memset(fb, 0, (size_t)w * h);
+
+    /* PPA input: the indexed buffer palette-converted to RGB565 each frame. */
+    uint16_t *rgb = heap_caps_malloc((size_t)w * h * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!rgb) rgb = heap_caps_malloc((size_t)w * h * 2, MALLOC_CAP_8BIT);
+    if (!rgb) { heap_caps_free(fb); return -1; }
+    memset(rgb, 0, (size_t)w * h * 2);
+
     s_gfx_fb = fb;
+    s_gfx_rgb = rgb;
     return 0;
 }
 
@@ -471,8 +533,10 @@ int rgb_display_set_mode(screen_mode_t mode)
             ESP_LOGE(TAG, "graphics framebuffer alloc failed");
             return -1;
         }
-        /* Paint the (static) black border once; frames only touch the image. */
-        memset(s_fb, 0, (size_t)s_pw * s_ph * s_bpp);
+        /* Paint the (static) black border into both scanout buffers once; the
+         * per-frame PPA only writes the centered image. */
+        s_draw_idx = 0;
+        dpi_fbs_clear_black();
         s_screen_mode = mode;
         ESP_LOGI(TAG, "graphics %dx%d x%d, margin (%d,%d)",
                  s_gw, s_gh, s_gscale, s_gmx, s_gmy);
@@ -482,11 +546,14 @@ int rgb_display_set_mode(screen_mode_t mode)
     if (mode == SM_TEXT) {
         /* Stop graphics rendering, then drain one render cycle before freeing
          * so the render task can't be mid-frame on the buffer we release. */
-        uint8_t *old = s_gfx_fb;
+        uint8_t  *old     = s_gfx_fb;
+        uint16_t *old_rgb = s_gfx_rgb;
         s_screen_mode = SM_TEXT;
         s_gfx_fb = NULL;
+        s_gfx_rgb = NULL;
         vTaskDelay(pdMS_TO_TICKS(REFRESH_MS * 2));
         if (old) heap_caps_free(old);
+        if (old_rgb) heap_caps_free(old_rgb);
 
         if (s_cbs && s_cbs->exit_graphics) s_cbs->exit_graphics();
         if (s_cbs && s_cbs->get_text_buffer) {
