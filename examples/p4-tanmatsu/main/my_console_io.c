@@ -8,6 +8,7 @@
 
 #include "my_console_io.h"
 #include "tanmatsu_lcd.h"
+#include "rgb_display.h"
 #include "vterm.h"
 #include "esp_vfs.h"
 #include "esp_log.h"
@@ -32,6 +33,7 @@ static int s_fd_flags[MAX_CONSOLE_FDS] = {0};
 static int s_next_local_fd = 0;
 
 static console_output_mode_t s_output_mode = CONSOLE_OUT_BOTH;
+static console_output_mode_t s_saved_output_mode = CONSOLE_OUT_BOTH;  /* restored after graphics */
 
 /* USB connectivity state (auto-disables USB writes if cable absent). */
 static int s_usb_connected = 1;
@@ -68,6 +70,13 @@ static int is_terminal_probe(const char *data, size_t size)
 static ssize_t my_console_write(int fd, const void *data, size_t size)
 {
     const char *str = (const char *)data;
+
+    /* Graphics mode: the LCD shows the app's framebuffer, so don't touch vterm;
+     * mirror any text the app prints to USB only. */
+    if (s_output_mode == CONSOLE_OUT_GFX) {
+        if (s_usb_connected) usb_serial_jtag_write_bytes(data, size, pdMS_TO_TICKS(1));
+        return size;
+    }
 
     if (s_output_mode == CONSOLE_OUT_BOTH || s_output_mode == CONSOLE_OUT_LCD) {
         int active = vterm_get_active();
@@ -189,6 +198,55 @@ static void probe_usb_connection(void)
     else { s_usb_connected = 1; s_usb_fail_count = 0; }
 }
 
+/* --- Display bridge callbacks (rgb_display.h) ---
+ * Wire the graphics-mode text<->graphics hand-off back into vterm + console
+ * routing. Invoked from rgb_display_set_mode() when an ELF app switches modes. */
+
+static const uint16_t *display_cb_get_text_palette(void)
+{
+    return vterm_get_palette();
+}
+
+static int display_cb_enter_graphics(void)
+{
+    vterm_enter_graphics_mode();          /* save the text buffer to PSRAM */
+    s_saved_output_mode = s_output_mode;
+    s_output_mode = CONSOLE_OUT_GFX;
+    return 0;
+}
+
+static int display_cb_exit_graphics(void)
+{
+    vterm_exit_graphics_mode();           /* restore the text buffer */
+    s_output_mode = s_saved_output_mode;
+    return 0;
+}
+
+static lcd_cell_t *display_cb_get_text_buffer(void)
+{
+    return (lcd_cell_t *)vterm_get_direct_buffer();
+}
+
+static void display_cb_flush_input(void)
+{
+    vterm_input_flush(vterm_get_active());
+}
+
+static const rgb_display_callbacks_t s_display_cbs = {
+    .get_text_palette = display_cb_get_text_palette,
+    .enter_graphics   = display_cb_enter_graphics,
+    .exit_graphics    = display_cb_exit_graphics,
+    .get_text_buffer  = display_cb_get_text_buffer,
+    .flush_input      = display_cb_flush_input,
+};
+
+/* Exported to ELF apps: adopt the current vterm palette on the LCD and redraw.
+ * `plasma` sets a custom palette via vterm_set_palette() then calls this. */
+void my_display_refresh_palette(void)
+{
+    tanmatsu_lcd_set_palette(vterm_get_palette());  /* copies + marks dirty */
+}
+
 esp_err_t my_console_init(void)
 {
     /* vterm first (allocates the cell buffers). */
@@ -200,7 +258,11 @@ esp_err_t my_console_init(void)
     if (ret != ESP_OK) { ESP_LOGE(TAG, "tanmatsu_lcd_init failed"); return ret; }
     tanmatsu_lcd_set_buffer((const lcd_cell_t *)vterm_get_direct_buffer(),
                             VTERM_COLS, VTERM_ROWS);
+    tanmatsu_lcd_set_palette(vterm_get_palette());  /* keep LCD palette in sync */
     sync_cursor_and_redraw();
+
+    /* Bridge the graphics-mode display API back to vterm + console routing. */
+    rgb_display_set_callbacks(&s_display_cbs);
 
     vterm_set_switch_callback(on_vt_switch);
 

@@ -5,6 +5,8 @@ idf_component_register(
         "my_console_io.c"
         "tanmatsu_keyboard.c"
         "net_bringup.c"
+        "cmd_testgfx.c"     # built-in graphics smoke test
+        "elf_extras.c"      # extra symbols exported to ELF apps
 
     PRIV_REQUIRES
         # Core
@@ -12,6 +14,7 @@ idf_component_register(
         console
         vfs
         nvs_flash
+        esp_timer
         # BreezyBox stack
         breezybox
         breezy_term

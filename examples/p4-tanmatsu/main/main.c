@@ -104,6 +104,8 @@ static int cmd_netup(int argc, char **argv)
     return err == ESP_OK ? 0 : 1;
 }
 
+extern int cmd_testgfx(int argc, char **argv);  /* cmd_testgfx.c */
+
 static void register_commands(void)
 {
     static const esp_console_cmd_t cmds[] = {
@@ -112,6 +114,7 @@ static void register_commands(void)
         { .command = "colortest", .help = "ANSI color test",              .hint = NULL,                      .func = &cmd_colortest },
         { .command = "setcon",    .help = "Set console output",           .hint = "<lcd|usb|both|usbreset>", .func = &cmd_setcon },
         { .command = "netup",     .help = "Bring up the C6 WiFi radio",   .hint = NULL,                      .func = &cmd_netup },
+        { .command = "testgfx",   .help = "VGA 320x200 graphics demo",    .hint = "[-t seconds] [-v]",       .func = &cmd_testgfx },
     };
     for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
         esp_console_cmd_register(&cmds[i]);
@@ -160,6 +163,10 @@ void app_main(void)
     /* Start the BreezyBox shell on our stdio (LCD + USB). */
     ESP_ERROR_CHECK(breezybox_start_stdio(8192, 5));
     register_commands();
+
+    /* Keep P4-demo-specific symbols in the firmware for the ELF loader. */
+    extern void breezy_p4_export_symbols(void);
+    breezy_p4_export_symbols();
 
     /* Display renders via the LCD task; keep app_main alive. */
     while (1) {

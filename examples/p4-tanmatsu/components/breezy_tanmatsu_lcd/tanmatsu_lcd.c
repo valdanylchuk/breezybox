@@ -12,10 +12,14 @@
 #include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 
 #include "bsp/display.h"
+
+#include "rgb_display.h"   /* graphics-mode ABI exposed to ELF apps */
+#include "rgb_gfx.h"
 
 static const char *TAG = "tanmatsu_lcd";
 
@@ -79,6 +83,74 @@ static bool     s_endian_big = false;
 
 static inline uint8_t exp5(uint8_t v5) { return (uint8_t)((v5 * 255 + 15) / 31); }
 static inline uint8_t exp6(uint8_t v6) { return (uint8_t)((v6 * 255 + 31) / 63); }
+
+/* --- Graphics mode (8bpp indexed) ---
+ *
+ * An ELF app draws into s_gfx_fb (s_gw x s_gh, one byte = palette index). The
+ * render task upscales it by an integer factor, palettizes through the 256-color
+ * VGA palette and rotates it into the native panel framebuffer (s_fb), exactly
+ * like the text path. Black borders (centered fit) are painted once on entry.
+ */
+static screen_mode_t s_screen_mode = SM_TEXT;
+static uint8_t      *s_gfx_fb = NULL;
+static int           s_gw = 0, s_gh = 0;   /* gfx framebuffer size */
+static int           s_gscale = 1;         /* integer upscale factor */
+static int           s_gmx = 0, s_gmy = 0; /* centering margins (logical px) */
+
+static uint16_t s_vga_pal[256];            /* RGB565 palette */
+static uint8_t  s_vga_out888[256][3];      /* pre-ordered output bytes */
+static uint16_t s_vga_out565[256];         /* pre-ordered 16-bit value */
+
+static SemaphoreHandle_t s_vsync_sem = NULL;
+static volatile bool     s_vsync_wait = false;
+
+static const rgb_display_callbacks_t *s_cbs = NULL;
+
+/* Volatile sink for the ELF export anchor (see tanmatsu_lcd_init). */
+static volatile const void *s_export_sink;
+
+/* Rebuild the output-byte LUT for one VGA palette entry (honours endianness). */
+static void vga_out_entry(int i)
+{
+    uint16_t c = s_vga_pal[i];
+    uint8_t r = exp5((c >> 11) & 0x1F);
+    uint8_t g = exp6((c >> 5) & 0x3F);
+    uint8_t b = exp5(c & 0x1F);
+    if (s_endian_big) {            /* BGR byte order */
+        s_vga_out888[i][0] = b; s_vga_out888[i][1] = g; s_vga_out888[i][2] = r;
+        s_vga_out565[i] = (uint16_t)((c << 8) | (c >> 8));
+    } else {                       /* RGB byte order */
+        s_vga_out888[i][0] = r; s_vga_out888[i][1] = g; s_vga_out888[i][2] = b;
+        s_vga_out565[i] = c;
+    }
+}
+
+static void vga_rebuild_out(void)
+{
+    for (int i = 0; i < 256; i++) vga_out_entry(i);
+}
+
+/* Default VGA palette: 16 CGA colors + a 6x6x6 color cube + 24-step grayscale. */
+static void vga_init_palette(void)
+{
+    memcpy(s_vga_pal, s_cga565, sizeof(s_cga565));
+    int idx = 16;
+    for (int r = 0; r < 6; r++)
+        for (int g = 0; g < 6; g++)
+            for (int b = 0; b < 6; b++) {
+                uint16_t r5 = (uint16_t)((r * 51 * 31) / 255);
+                uint16_t g6 = (uint16_t)((g * 51 * 63) / 255);
+                uint16_t b5 = (uint16_t)((b * 51 * 31) / 255);
+                s_vga_pal[idx++] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+            }
+    for (int i = 0; i < 24; i++) {
+        int gray = 8 + i * 10;
+        uint16_t g5 = (uint16_t)((gray * 31) / 255);
+        uint16_t g6 = (uint16_t)((gray * 63) / 255);
+        s_vga_pal[232 + i] = (uint16_t)((g5 << 11) | (g6 << 5) | g5);
+    }
+    vga_rebuild_out();
+}
 
 static void rebuild_palette_out(void)
 {
@@ -181,10 +253,59 @@ static void render_frame(bool blink_on)
     }
 }
 
+/* Upscale + palettize the indexed graphics framebuffer into s_fb (rotated). */
+static void render_gfx_frame(void)
+{
+    const uint8_t *fb = s_gfx_fb;
+    if (!fb || !s_fb) return;
+
+    const int gw = s_gw, gh = s_gh, scale = s_gscale, mx = s_gmx, my = s_gmy;
+
+    for (int sy = 0; sy < gh; sy++) {
+        const uint8_t *srow = &fb[(size_t)sy * gw];
+        for (int ry = 0; ry < scale; ry++) {
+            int ly = my + sy * scale + ry;
+            if (ly < 0 || ly >= s_lh) continue;
+
+            for (int sx = 0; sx < gw; sx++) {
+                uint8_t idx = srow[sx];
+                int lx0 = mx + sx * scale;
+                for (int rx = 0; rx < scale; rx++) {
+                    int lx = lx0 + rx;
+                    if (lx < 0 || lx >= s_lw) continue;
+                    uint8_t *p = phys_px(lx, ly);
+                    if (s_is_565) {
+                        uint16_t v = s_vga_out565[idx];
+                        p[0] = (uint8_t)v;
+                        p[1] = (uint8_t)(v >> 8);
+                    } else {
+                        p[0] = s_vga_out888[idx][0];
+                        p[1] = s_vga_out888[idx][1];
+                        p[2] = s_vga_out888[idx][2];
+                    }
+                }
+            }
+        }
+    }
+}
+
 static void render_task(void *arg)
 {
     (void)arg;
     for (;;) {
+        /* Graphics mode: redraw every tick (apps animate) + emulate vsync. */
+        if (s_screen_mode != SM_TEXT) {
+            render_gfx_frame();
+            bsp_display_blit(0, 0, s_pw, s_ph, s_fb);
+            if (s_vsync_wait && s_vsync_sem) {
+                s_vsync_wait = false;
+                xSemaphoreGive(s_vsync_sem);
+            }
+            vTaskDelay(pdMS_TO_TICKS(REFRESH_MS));
+            continue;
+        }
+
+        /* Text mode: only blit when the buffer is dirty or the cursor blinks. */
         uint32_t now = xTaskGetTickCount();
         bool blink = ((now / pdMS_TO_TICKS(BLINK_MS)) & 1) != 0;
 
@@ -246,9 +367,33 @@ esp_err_t tanmatsu_lcd_init(void)
                TANMATSU_FONT_H);
     }
 
-    /* Default palette. */
+    /* Default text palette + 256-color VGA palette (graphics mode). */
     memcpy(s_pal565, s_cga565, sizeof(s_pal565));
     rebuild_palette_out();
+    vga_init_palette();
+
+    /* Vsync emulation: render task signals after each graphics-mode blit. */
+    s_vsync_sem = xSemaphoreCreateBinary();
+
+    /* Force-link the graphics-mode ABI so the ELF loader can resolve it.
+     * Each address is stored through a volatile sink: volatile writes cannot be
+     * elided by -O2 / --gc-sections, so the referenced functions are retained
+     * even though nothing in the firmware calls them. Do not delete. */
+    const void *anchors[] = {
+        (void *)rgb_display_set_mode,           (void *)rgb_display_get_mode,
+        (void *)rgb_display_get_framebuffer,    (void *)rgb_display_get_fb_width,
+        (void *)rgb_display_get_fb_height,      (void *)rgb_display_set_vga_palette,
+        (void *)rgb_display_set_vga_palette_entry,
+        (void *)rgb_display_get_vga_palette_entry,
+        (void *)rgb_display_refresh_palette,    (void *)rgb_display_wait_vsync,
+        (void *)rgb_gfx_clear,  (void *)rgb_gfx_pixel,
+        (void *)rgb_gfx_hline,  (void *)rgb_gfx_vline,
+        (void *)rgb_gfx_rect,   (void *)rgb_gfx_rectfill,
+        (void *)rgb_gfx_blit,   (void *)rgb_gfx_blit_flip,
+    };
+    for (size_t i = 0; i < sizeof(anchors) / sizeof(anchors[0]); i++) {
+        s_export_sink = anchors[i];
+    }
 
     /* Framebuffer in PSRAM (sized to the native panel, not the logical canvas). */
     size_t fb_size = (size_t)s_pw * s_ph * s_bpp;
@@ -272,4 +417,128 @@ esp_err_t tanmatsu_lcd_init(void)
         return ESP_FAIL;
     }
     return ESP_OK;
+}
+
+/* ======================================================================== *
+ *  Graphics-mode API (rgb_display_* / rgb_gfx_*) consumed by ELF apps.
+ *  Shares the panel framebuffer, rotation and blit path with the text mode.
+ * ======================================================================== */
+
+void rgb_display_set_callbacks(const rgb_display_callbacks_t *cb)
+{
+    s_cbs = cb;
+}
+
+screen_mode_t rgb_display_get_mode(void)      { return s_screen_mode; }
+uint8_t      *rgb_display_get_framebuffer(void){ return s_gfx_fb; }
+int           rgb_display_get_fb_width(void)  { return s_gfx_fb ? s_gw : 0; }
+int           rgb_display_get_fb_height(void) { return s_gfx_fb ? s_gh : 0; }
+
+/* Allocate + size the indexed framebuffer and compute the centered upscale. */
+static int gfx_setup_mode(screen_mode_t mode)
+{
+    int w, h;
+    if (mode == SM_VGA13H)      { w = 320; h = 200; }
+    else if (mode == SM_150P)   { w = 256; h = 150; }
+    else                        return -1;
+
+    int sx = s_lw / w, sy = s_lh / h;
+    int scale = sx < sy ? sx : sy;
+    if (scale < 1) scale = 1;
+
+    s_gw = w; s_gh = h; s_gscale = scale;
+    s_gmx = (s_lw - w * scale) / 2;
+    s_gmy = (s_lh - h * scale) / 2;
+
+    uint8_t *fb = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!fb) fb = heap_caps_malloc((size_t)w * h, MALLOC_CAP_8BIT);
+    if (!fb) return -1;
+    memset(fb, 0, (size_t)w * h);
+    s_gfx_fb = fb;
+    return 0;
+}
+
+int rgb_display_set_mode(screen_mode_t mode)
+{
+    if (mode == s_screen_mode) return 0;
+
+    if (mode == SM_VGA13H || mode == SM_150P) {
+        if (s_cbs && s_cbs->enter_graphics && s_cbs->enter_graphics() != 0) {
+            return -1;
+        }
+        if (gfx_setup_mode(mode) != 0) {
+            if (s_cbs && s_cbs->exit_graphics) s_cbs->exit_graphics();
+            ESP_LOGE(TAG, "graphics framebuffer alloc failed");
+            return -1;
+        }
+        /* Paint the (static) black border once; frames only touch the image. */
+        memset(s_fb, 0, (size_t)s_pw * s_ph * s_bpp);
+        s_screen_mode = mode;
+        ESP_LOGI(TAG, "graphics %dx%d x%d, margin (%d,%d)",
+                 s_gw, s_gh, s_gscale, s_gmx, s_gmy);
+        return 0;
+    }
+
+    if (mode == SM_TEXT) {
+        /* Stop graphics rendering, then drain one render cycle before freeing
+         * so the render task can't be mid-frame on the buffer we release. */
+        uint8_t *old = s_gfx_fb;
+        s_screen_mode = SM_TEXT;
+        s_gfx_fb = NULL;
+        vTaskDelay(pdMS_TO_TICKS(REFRESH_MS * 2));
+        if (old) heap_caps_free(old);
+
+        if (s_cbs && s_cbs->exit_graphics) s_cbs->exit_graphics();
+        if (s_cbs && s_cbs->get_text_buffer) {
+            const lcd_cell_t *b = s_cbs->get_text_buffer();
+            if (b) s_cells = b;
+        }
+        if (s_cbs && s_cbs->flush_input) s_cbs->flush_input();
+        s_dirty = true;
+        ESP_LOGI(TAG, "text mode");
+        return 0;
+    }
+
+    ESP_LOGE(TAG, "unknown screen mode: %d", (int)mode);
+    return -1;
+}
+
+void rgb_display_set_vga_palette(const uint16_t palette[256])
+{
+    if (!palette) return;
+    memcpy(s_vga_pal, palette, sizeof(s_vga_pal));
+    vga_rebuild_out();
+}
+
+void rgb_display_set_vga_palette_entry(int index, uint16_t rgb565)
+{
+    if (index >= 0 && index < 256) {
+        s_vga_pal[index] = rgb565;
+        vga_out_entry(index);
+    }
+}
+
+uint16_t rgb_display_get_vga_palette_entry(int index)
+{
+    return (index >= 0 && index < 256) ? s_vga_pal[index] : 0;
+}
+
+void rgb_display_refresh_palette(void)
+{
+    /* Pull the live text palette (vterm) through the console bridge, if any. */
+    if (s_cbs && s_cbs->get_text_palette) {
+        const uint16_t *p = s_cbs->get_text_palette();
+        if (p) {
+            memcpy(s_pal565, p, sizeof(s_pal565));
+            rebuild_palette_out();
+        }
+    }
+    s_dirty = true;
+}
+
+void rgb_display_wait_vsync(void)
+{
+    if (s_screen_mode == SM_TEXT || !s_vsync_sem) return;
+    s_vsync_wait = true;
+    xSemaphoreTake(s_vsync_sem, pdMS_TO_TICKS(100));  /* ~3 frames timeout */
 }

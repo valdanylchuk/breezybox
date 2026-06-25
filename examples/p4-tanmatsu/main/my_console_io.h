@@ -17,6 +17,7 @@ typedef enum {
     CONSOLE_OUT_LCD,   /* LCD (vterm) only */
     CONSOLE_OUT_USB,   /* USB-Serial-JTAG only */
     CONSOLE_OUT_BOTH,  /* both (default) */
+    CONSOLE_OUT_GFX,   /* graphics mode: skip vterm/LCD, mirror text to USB */
 } console_output_mode_t;
 
 /*
@@ -29,6 +30,13 @@ void                  my_console_set_output_mode(console_output_mode_t mode);
 console_output_mode_t my_console_get_output_mode(void);
 int                   my_console_usb_connected(void);
 void                  my_console_usb_reconnect(void);
+
+/*
+ * Push the live vterm text palette to the LCD and redraw. ELF apps call this
+ * (by symbol name) after vterm_set_palette() to make a palette change visible
+ * without rewriting cells -- e.g. the `plasma` demo. Exported to the loader.
+ */
+void                  my_display_refresh_palette(void);
 
 #ifdef __cplusplus
 }
