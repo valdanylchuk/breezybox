@@ -20,7 +20,7 @@ Also components, ELF apps, and full firmware project examples for it.
 
 ## Firmware project examples
 
-- [Waveshare ESP32-S3-Touch-LCD-7B 1024x600](https://github.com/valdanylchuk/breezydemo) - most detailed, with demo video
+- [Waveshare ESP32-S3-Touch-LCD-7B 1024x600](examples/s3-waveshare/) - most detailed, with demo video
 - [Tanmatsu Handheld ESP32-P4 800x480](examples/p4-tanmatsu/)
 - [headless sshd demo S3](examples/ssh/)
 - [vterm and BT init on C3](examples/parts_c3/)
@@ -35,7 +35,7 @@ I try to keep BreezyBox modular, so some components can be reused separately.
 - [breezy_term](src/components/breezy_term/) - vterm
 - [breezy_bt](src/components/breezy_bt/) - Bluetooth keyboard
 - [breezy_ssh](src/components/breezy_ssh/) - basic sshd
-- [breezy_rgb_lcd](https://github.com/valdanylchuk/breezy_rgb_lcd)
+- [breezy_rgb_lcd](src/components/breezy_rgb_lcd/)
 
 ## ELF Apps
 
