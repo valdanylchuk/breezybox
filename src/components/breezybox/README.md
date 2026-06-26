@@ -1,8 +1,8 @@
 # BreezyBox
 
-A BusyBox-inspired shell and virtual terminal system for ESP32.
-
 [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezybox/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezybox)
+
+A BusyBox-inspired shell and virtual terminal system for ESP32.
 
 ## Features
 

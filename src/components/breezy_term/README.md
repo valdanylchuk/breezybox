@@ -1,8 +1,8 @@
 # breezy_term
 
-This is the vterm used in [BreezyBox](https://github.com/valdanylchuk/breezybox), a mini shell for esp32-s3. It seemed nice and reusable, so I release it as a standalone component with no dependencies, for people who need a vterm but do not need full BreezyBox shell.
-
 [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezy_term/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezy_term)
+
+This is the vterm used in [BreezyBox](https://github.com/valdanylchuk/breezybox), a mini shell for esp32-s3. It seemed nice and reusable, so I release it as a standalone component with no dependencies, for people who need a vterm but do not need full BreezyBox shell.
 
 ## Features
 

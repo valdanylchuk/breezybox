@@ -31,11 +31,11 @@ Also components, ELF apps, and full firmware project examples for it.
 
 I try to keep BreezyBox modular, so some components can be reused separately.
 
-- [breezybox](src/components/breezybox/) - command shell, VFS integration
-- [breezy_term](src/components/breezy_term/) - vterm
-- [breezy_bt](src/components/breezy_bt/) - Bluetooth keyboard
-- [breezy_ssh](src/components/breezy_ssh/) - basic sshd
-- [breezy_rgb_lcd](src/components/breezy_rgb_lcd/)
+- [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezybox/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezybox) [breezybox](src/components/breezybox/) - command shell, VFS integration
+- [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezy_term/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezy_term) [breezy_term](src/components/breezy_term/) - vterm
+- [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezy_bt/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezy_bt) [breezy_bt](src/components/breezy_bt/) - Bluetooth keyboard
+- [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezy_ssh/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezy_ssh) [breezy_ssh](src/components/breezy_ssh/) - basic sshd
+- [![Component Registry](https://components.espressif.com/components/valdanylchuk/breezy_rgb_lcd/badge.svg)](https://components.espressif.com/components/valdanylchuk/breezy_rgb_lcd) [breezy_rgb_lcd](src/components/breezy_rgb_lcd/)
 
 ## ELF Apps
 
