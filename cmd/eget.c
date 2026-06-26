@@ -23,6 +23,15 @@
 #define MAX_DOWNLOAD_SIZE   (512 * 1024) // 512KB max binary size
 #define BIN_DIR             "/root/bin"
 
+#if defined(__riscv)
+  #define BREEZY_ARCH "rv32"
+#elif defined(__XTENSA__)
+  #define BREEZY_ARCH "xtensa"
+#else
+  #error "eget: unknown breezy target arch"
+#endif
+#define ARCH_SUFFIX "." BREEZY_ARCH ".elf"
+
 // Buffer for HTTP response
 static char *s_response_buf = NULL;
 static int s_response_len = 0;
@@ -169,15 +178,16 @@ static int download_file(const char *url, const char *dest_path)
     return 0;
 }
 
-// Remove .elf extension from filename
-static void strip_elf_ext(const char *name, char *out, size_t out_size)
+// Copy name with the arch suffix removed
+static void strip_arch_suffix(const char *name, char *out, size_t out_size)
 {
     strncpy(out, name, out_size - 1);
     out[out_size - 1] = '\0';
-    
+
     size_t len = strlen(out);
-    if (len > 4 && strcasecmp(out + len - 4, ".elf") == 0) {
-        out[len - 4] = '\0';
+    size_t sfx = strlen(ARCH_SUFFIX);
+    if (len > sfx) {
+        out[len - sfx] = '\0';
     }
 }
 
@@ -260,17 +270,19 @@ int cmd_eget(int argc, char **argv)
         
         const char *asset_name = name->valuestring;
         size_t name_len = strlen(asset_name);
-        
-        // Check if it's an .elf file
-        if (name_len < 5 || strcasecmp(asset_name + name_len - 4, ".elf") != 0) {
+        size_t sfx_len = strlen(ARCH_SUFFIX);
+
+        // Only this platform's binaries: <name>.<arch>.elf
+        if (name_len <= sfx_len ||
+            strcasecmp(asset_name + name_len - sfx_len, ARCH_SUFFIX) != 0) {
             continue;
         }
-        
+
         printf("Found: %s\n", asset_name);
-        
+
         // Build destination path
         char bin_name[64];
-        strip_elf_ext(asset_name, bin_name, sizeof(bin_name));
+        strip_arch_suffix(asset_name, bin_name, sizeof(bin_name));
         
         char dest_path[128];
         snprintf(dest_path, sizeof(dest_path), "%s/%s", BIN_DIR, bin_name);
@@ -284,7 +296,7 @@ int cmd_eget(int argc, char **argv)
     cJSON_Delete(root);
     
     if (downloaded == 0) {
-        printf("eget: no .elf files found in release\n");
+        printf("eget: no %s binaries found in release\n", ARCH_SUFFIX);
         return 1;
     }
     
