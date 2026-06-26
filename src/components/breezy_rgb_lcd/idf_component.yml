@@ -1,0 +1,28 @@
+version: "1.0.1"
+description: "breezy_rgb_lcd - The rgb_lcd display driver used in BreezyBox demo, a mini shell for esp32"
+url: "https://github.com/valdanylchuk/breezybox/tree/main/src/components/breezy_rgb_lcd"
+repository: "https://github.com/valdanylchuk/breezybox.git"
+documentation: "https://github.com/valdanylchuk/tree/main/src/components/breezy_rgb_lcd#readme"
+issues: "https://github.com/valdanylchuk/breezybox/issues"
+
+maintainers:
+  - "Valentyn Danylchuk <val@danylchuk.com>"
+
+license: "MIT"
+
+targets:
+  - esp32
+  - esp32c2
+  - esp32c3
+  - esp32c5
+  - esp32c6
+  - esp32c61
+  - esp32h2
+  - esp32h21
+  - esp32h4
+  - esp32p4
+  - esp32s2
+  - esp32s3
+dependencies:
+  idf:
+    version: ">=5.0"
