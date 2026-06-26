@@ -269,7 +269,7 @@ static int save_file(const char *path) {
 
     E.modified = 0;
     if (path != E.filepath) {
-        strncpy(E.filepath, path, sizeof(E.filepath) - 1);
+        snprintf(E.filepath, sizeof(E.filepath), "%s", path);
     }
     snprintf(E.status, sizeof(E.status), "\"%s\" %d lines written", E.filepath, E.line_count);
     return 1;
@@ -414,8 +414,7 @@ static void backspace_char(void) {
         char *curr = E.lines[E.cur_row];
 
         char *new_line = malloc(prev_len + strlen(curr) + 1);
-        strcpy(new_line, prev);
-        strcat(new_line, curr);
+        snprintf(new_line, prev_len + strlen(curr) + 1, "%s%s", prev, curr);
 
         free(E.lines[E.cur_row - 1]);
         E.lines[E.cur_row - 1] = new_line;
@@ -767,7 +766,7 @@ int main(int argc, char **argv) {
 
     /* Load file or create empty buffer */
     if (argc >= 2) {
-        strncpy(E.filepath, argv[1], sizeof(E.filepath) - 1);
+        snprintf(E.filepath, sizeof(E.filepath), "%s", argv[1]);
         load_file(argv[1]);
     } else {
         insert_line_at(0, "");
