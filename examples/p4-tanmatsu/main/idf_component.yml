@@ -24,7 +24,5 @@ dependencies:
     version: "*"
   nicolaielectronics/wifi-manager:
     version: "*"
-
-# NOTE: breezybox is pulled in via EXTRA_COMPONENT_DIRS "../.." in the top-level
-# CMakeLists.txt (in-tree development). If you instead install from the registry,
-# add:  valdanylchuk/breezybox: "^1.0.3"
+  valdanylchuk/breezybox:
+    version: "^1.0.4"

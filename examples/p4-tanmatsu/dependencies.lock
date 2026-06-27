@@ -89,7 +89,7 @@ dependencies:
       require: private
       version: '>=4.4.3'
     source:
-      registry_url: https://components.espressif.com/
+      registry_url: https://components.espressif.com
       type: service
     targets:
     - esp32
@@ -223,7 +223,7 @@ dependencies:
       require: private
       version: '>=4.4'
     source:
-      registry_url: https://components.espressif.com/
+      registry_url: https://components.espressif.com
       type: service
     version: 1.3.2
   idf:
@@ -237,7 +237,7 @@ dependencies:
       require: private
       version: '>=5.0'
     source:
-      registry_url: https://components.espressif.com/
+      registry_url: https://components.espressif.com
       type: service
     version: 1.22.1
   nicolaielectronics/bmi270:
@@ -428,16 +428,47 @@ dependencies:
     - esp32p4
     - esp32s2
     - esp32s3
-    version: 1.0.2
+    version: 1.0.3
+  valdanylchuk/breezybox:
+    component_hash: e7f5f47be5e746da97b85c64348cccbac6c004b8f214bc5dc5b5f455a1e30220
+    dependencies:
+    - name: espressif/elf_loader
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.3
+    - name: espressif/zlib
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.3
+    - name: idf
+      require: private
+      version: '>=5.0'
+    - name: joltwallet/littlefs
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.20
+    - name: valdanylchuk/breezy_term
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.0.3
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32c6
+    - esp32c61
+    - esp32p4
+    - esp32s2
+    - esp32s3
+    version: 1.0.4
 direct_dependencies:
 - badgeteam/badge-bsp
-- espressif/elf_loader
-- espressif/zlib
 - idf
-- joltwallet/littlefs
 - nicolaielectronics/tanmatsu-wifi
 - nicolaielectronics/wifi-manager
 - valdanylchuk/breezy_term
-manifest_hash: 40dcda1de8012ffce0fde760e5d55d38d7f7115cf94c474bc5ff31f9c8b08f8f
+- valdanylchuk/breezybox
+manifest_hash: 35c7b9ded6df898726cee38ec82b1b9047ba434d4afbccce30ac24153045e019
 target: esp32p4
 version: 2.0.0

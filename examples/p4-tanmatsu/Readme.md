@@ -100,11 +100,6 @@ idf.py build
 idf.py -p <PORT> flash monitor
 ```
 
-The top-level `CMakeLists.txt` pulls the in-tree `breezybox` component via
-`EXTRA_COMPONENT_DIRS "../.."`. Other dependencies (`badge-bsp`, `breezy_term`,
-the Tanmatsu WiFi stack) come from the component registry via
-`main/idf_component.yml`.
-
 Flashing this firmware replaces the native launcher while you test; re-flash the
 launcher to switch back. The C6 radio firmware is **not** touched.
 
