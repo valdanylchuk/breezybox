@@ -11,7 +11,7 @@
 #define BUF_SIZE     256
 #define CACHE_W      256
 
-#ifdef __XTENSA__
+#if defined(__XTENSA__) || defined(__riscv) /* ESP32-S3 / ESP32-P4 */
 
     typedef uint32_t TickType_t;
     TickType_t xTaskGetTickCount(void);
@@ -99,7 +99,7 @@
 
     static void plat_sync_frame(void) { usleep(1000000 / TARGET_FPS); }
 
-#endif // XTENSA / POSIX
+#endif // ESP (XTENSA/RISCV) / POSIX
 
 static char s_out_buf[BUF_SIZE];
 static int  s_buf_pos = 0;

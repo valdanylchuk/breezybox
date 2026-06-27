@@ -15,7 +15,7 @@
 /* PLATFORM SHIM                                                             */
 /* ========================================================================= */
 
-#ifdef __XTENSA__
+#if defined(__XTENSA__) || defined(__riscv) /* ESP32-S3 / ESP32-P4 */
     #include <unistd.h>
     #include "esp_timer.h"
     #define portTICK_PERIOD_MS 1

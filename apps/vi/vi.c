@@ -27,8 +27,8 @@
 #define ESC_BOLD        "\033[1m"
 
 /* ========== Platform Abstraction ========== */
-#ifdef __XTENSA__
-    /* ESP32-S3 */
+#if defined(__XTENSA__) || defined(__riscv)
+    /* ESP32-S3 / ESP32-P4 */
     void vterm_get_size(int *rows, int *cols);
 
     static int s_orig_fcntl;

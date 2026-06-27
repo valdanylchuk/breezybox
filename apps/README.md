@@ -27,9 +27,11 @@ POSIX versions for your Mac can be built literally like this:
 gcc vi.c
 ```
 
-For ESP32 builds, there is usually buildelf.sh included, with the build commands I used. You will need xtensa-esp32s3-elf-gcc from the xtensa-esp-elf toolkit. [Espressif IDF Tools documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/tools/idf-tools.html) provides a good starting point on where to get and how to install that.
+For ESP32 builds, each app has a buildelf.sh (ESP32-S3, Xtensa) and a buildelf_rv32.sh (ESP32-P4, RISC-V) with the build commands I used. You will need xtensa-esp32s3-elf-gcc and riscv32-esp-elf-gcc from the esp-elf toolkits. [Espressif IDF Tools documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/tools/idf-tools.html) provides a good starting point on where to get and how to install those.
 
 You do not need a full ESP-IDF CMakeLists.txt and idf.py based setup for this.
+
+To build every app for both targets into `dist/` , run `./buildall.sh`.
 
 ## More BreezyBox apps elsewhere:
 
