@@ -409,12 +409,14 @@ dependencies:
       type: service
     version: 0.3.0
   valdanylchuk/breezy_term:
+    component_hash: d8a944d9ea380f6a019fca7c43ca3f02e80523768730b53b8439da965db22641
     dependencies:
     - name: idf
+      require: private
       version: '>=5.0'
     source:
-      path: /Users/valentyn/Projects/esp/breezybox/src/components/breezy_term
-      type: local
+      registry_url: https://components.espressif.com
+      type: service
     targets:
     - esp32
     - esp32c2
@@ -467,8 +469,7 @@ direct_dependencies:
 - idf
 - nicolaielectronics/tanmatsu-wifi
 - nicolaielectronics/wifi-manager
-- valdanylchuk/breezy_term
 - valdanylchuk/breezybox
-manifest_hash: 35c7b9ded6df898726cee38ec82b1b9047ba434d4afbccce30ac24153045e019
+manifest_hash: e0d830128519f7f3771704654251e3ae2d127125da678314fdffe80c116b0bbc
 target: esp32p4
 version: 2.0.0
