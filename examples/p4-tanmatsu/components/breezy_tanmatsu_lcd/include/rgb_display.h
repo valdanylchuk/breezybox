@@ -24,6 +24,7 @@ typedef enum {
     SM_TEXT   = 3,      /* Text mode (vterm cell grid) */
     SM_VGA13H = 0x13,   /* VGA mode 13h: 320x200 @ 8bpp (256 colors) */
     SM_150P   = 0x80,   /* Custom mode:  256x150 @ 8bpp (256 colors) */
+    SM_GBA240 = 0x81,   /* Custom mode:  GBA-like 240x160 @ 8bpp (256 colors) */
 } screen_mode_t;
 
 /*
