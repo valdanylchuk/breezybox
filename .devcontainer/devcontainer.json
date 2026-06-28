@@ -1,0 +1,79 @@
+{
+    "name": "ESP-IDF v5.5.1",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "USER": "ubuntu"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.profiles.linux": {
+                    "bash": {
+                        "path": "/bin/bash",
+                        "icon": "terminal-bash"
+                    }
+                },
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "editor.defaultFormatter": "esbenp.prettier-vscode",
+                "editor.tabSize": 2,
+                "editor.insertSpaces": true,
+				"[markdown]": {
+					"editor.rulers": [120],
+					"editor.wordWrap": "wordWrapColumn",
+					"editor.wordWrapColumn": 120,
+					"diffEditor.ignoreTrimWhitespace": false,
+					"editor.quickSuggestions": {
+						"comments": "off",
+						"strings": "off",
+						"other": "off"
+					}
+				},
+				"[c]": {
+					"editor.formatOnSave": true,
+					"editor.defaultFormatter": "ms-vscode.cpptools"
+				},
+				"[cpp]": {
+					"editor.formatOnSave": true,
+					"editor.defaultFormatter": "ms-vscode.cpptools"
+				},
+				"[h]": {
+					"editor.formatOnSave": true,
+					"editor.defaultFormatter": "ms-vscode.cpptools"
+				},
+				"[hpp]": {
+					"editor.formatOnSave": true,
+					"editor.defaultFormatter": "ms-vscode.cpptools"
+				},
+				"workbench.colorCustomizations": {
+					"editorRuler.foreground": "#868686"
+				}
+            },
+
+            // Install relevant extensions in the dev container
+            "extensions": [
+                "twxs.cmake",
+                "ms-vscode.cpptools",
+                "ms-vscode.vscode-serial-monitor",
+                "ms-vscode.hexeditor",
+                "github.copilot",
+                "bierner.markdown-mermaid",
+                "esbenp.prettier-vscode"
+            ]
+        }
+    },
+    "userEnvProbe": "loginInteractiveShell",
+
+    // Forward serial device to enable flash & monitor from command line
+    // NOTE: This only works on Linux
+    "runArgs": [
+        // Use this if you are connected to your ESP32 via TTL-USB
+        // "--device=/dev/ttyUSB0"
+	"--device=/dev/ttyACM0"
+        // Use this if you are connected to your ESP32 via JTAG and wish to debug
+        // "--device=/dev/bus/usb"
+    ],
+
+    "remoteUser": "ubuntu"
+}
