@@ -82,6 +82,24 @@ int cmd_free(int argc, char **argv)
     return 0;
 }
 
+int cmd_sleep(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("Usage: sleep <seconds>\n");
+        return 1;
+    }
+
+    char *end;
+    long seconds = strtol(argv[1], &end, 10);
+    if (*end != '\0' || seconds < 0) {
+        printf("sleep: invalid time interval '%s'\n", argv[1]);
+        return 1;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(seconds * 1000));
+    return 0;
+}
+
 // Run a script file with redirect support
 int cmd_sh(int argc, char **argv)
 {
@@ -184,6 +202,7 @@ esp_err_t breezybox_register_commands(void)
         { .command = "free",  .help = "Show memory usage",       .hint = NULL,        .func = &cmd_free  },
         { .command = "date",  .help = "Show/set date and time",  .hint = "[\"YYYY-MM-DD HH:MM:SS\"]", .func = &cmd_date },
         { .command = "clear", .help = "Clear screen",            .hint = NULL,        .func = &cmd_clear },
+        { .command = "sleep", .help = "Sleep for N seconds",     .hint = "<seconds>", .func = &cmd_sleep },
         { .command = "sh",    .help = "Run script file",         .hint = "<script>",  .func = &cmd_sh    },
         { .command = "eget",  .help = "Download ELF from GitHub", .hint = "<user/repo>", .func = &cmd_eget },
         { .command = "wifi",  .help = "WiFi commands",           .hint = "<scan|connect|disconnect|status|forget>", .func = &cmd_wifi },
