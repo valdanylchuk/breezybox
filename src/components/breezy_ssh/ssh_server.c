@@ -404,6 +404,9 @@ static void server_task(void *arg)
 {
     int port = (int)(intptr_t)arg;
 
+    // Tell libssh NOT to use pthreads, bypassing mutex initialization failures
+    ssh_threads_set_callbacks(ssh_threads_get_noop());
+
     if (ssh_init() != SSH_OK) {
         ESP_LOGE(TAG, "ssh_init() failed — entropy/DRBG init error. "
                       "Increase SSH_TASK_STACK or check mbedTLS config.");
