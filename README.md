@@ -26,6 +26,7 @@ Also components, ELF apps, and full firmware project examples for it.
 - [vterm and BT init on C3](examples/parts_c3/)
 - [basic syntax headless](examples/basic/)
 - [Community project: Cardputer](https://github.com/chrisdiana/breezybox-cardputer)
+- [Community project: Esposito S3 320x240 CYD](https://github.com/ralsina/esposito)
 
 ## Components
 

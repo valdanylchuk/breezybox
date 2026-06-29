@@ -1,4 +1,4 @@
-version: "1.0.0"
+version: "1.0.1"
 description: "breezy_ssh - The SSH inbound connection component used in BreezyBox, a mini shell for esp32"
 url: "https://github.com/valdanylchuk/breezybox/tree/main/src/components/breezy_ssh"
 repository: "https://github.com/valdanylchuk/breezybox.git"

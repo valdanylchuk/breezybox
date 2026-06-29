@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esp_err.h"
+#include "esp_console.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -31,6 +32,15 @@ esp_err_t breezybox_start_usb(size_t stack_size, uint32_t priority);
  * @return ESP_OK on success
  */
 esp_err_t breezybox_start_stdio(size_t stack_size, uint32_t priority);
+
+/**
+ * @brief Like breezybox_start_stdio(), but registers extra_cmds before the
+ * init script runs, so init.sh can reference them (e.g. an optional
+ * component's `sshd`). Pass NULL/0 for no extras.
+ */
+esp_err_t breezybox_start_stdio_ex(size_t stack_size, uint32_t priority,
+                                   const esp_console_cmd_t *extra_cmds,
+                                   size_t extra_count);
 
 /**
  * @brief Just register BreezyBox commands (if you manage REPL yourself)

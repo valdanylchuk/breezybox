@@ -2,6 +2,6 @@ dependencies:
   idf:
     version: '>=5.5.0'
   valdanylchuk/breezybox:
-     version: '>=1.0.3'
+     version: '>=1.0.4'
   valdanylchuk/breezy_ssh:
-     version: '>=1.0.0'
+     version: '>=1.0.1'

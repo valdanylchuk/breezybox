@@ -66,18 +66,21 @@ void app_main(void)
     };
     ssh_server_set_host(&host);
 
-    // Local shell on USB. This also inits the filesystem, esp_console, and
-    // registers the built-in commands (including `wifi`).
-    breezybox_start_stdio(12288, 5);
-
-    // Add the sshd command (esp_console is up after breezybox_start_stdio).
+    // The sshd command, registered alongside the built-ins (before init.sh
+    // runs) so a boot-time `sshd start` in init.sh resolves. Registering it
+    // after breezybox_start_stdio() returns is too late -- the init script has
+    // already run by then and silently skips the unknown command.
     const esp_console_cmd_t sshd_cmd = {
         .command = "sshd",
         .help    = "SSH server",
         .hint    = "[start [port] | stop | status]",
         .func    = &cmd_sshd,
     };
-    esp_console_cmd_register(&sshd_cmd);
+
+    // Local shell on USB. This also inits the filesystem, esp_console, and
+    // registers the built-in commands (including `wifi`) plus our extras,
+    // then runs init.sh.
+    breezybox_start_stdio_ex(12288, 5, &sshd_cmd, 1);
 
     ESP_LOGI(TAG, "Ready. Try: wifi connect <ssid> <pass>  then  sshd start");
 }

@@ -82,6 +82,24 @@ int cmd_free(int argc, char **argv)
     return 0;
 }
 
+int cmd_sleep(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("Usage: sleep <seconds>\n");
+        return 1;
+    }
+
+    char *end;
+    long seconds = strtol(argv[1], &end, 10);
+    if (*end != '\0' || seconds < 0) {
+        printf("sleep: invalid time interval '%s'\n", argv[1]);
+        return 1;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(seconds * 1000));
+    return 0;
+}
+
 // Run a script file with redirect support
 int cmd_sh(int argc, char **argv)
 {
@@ -184,6 +202,7 @@ esp_err_t breezybox_register_commands(void)
         { .command = "free",  .help = "Show memory usage",       .hint = NULL,        .func = &cmd_free  },
         { .command = "date",  .help = "Show/set date and time",  .hint = "[\"YYYY-MM-DD HH:MM:SS\"]", .func = &cmd_date },
         { .command = "clear", .help = "Clear screen",            .hint = NULL,        .func = &cmd_clear },
+        { .command = "sleep", .help = "Sleep for N seconds",     .hint = "<seconds>", .func = &cmd_sleep },
         { .command = "sh",    .help = "Run script file",         .hint = "<script>",  .func = &cmd_sh    },
         { .command = "eget",  .help = "Download ELF from GitHub", .hint = "<user/repo>", .func = &cmd_eget },
         { .command = "wifi",  .help = "WiFi commands",           .hint = "<scan|connect|disconnect|status|forget>", .func = &cmd_wifi },
@@ -199,11 +218,12 @@ esp_err_t breezybox_register_commands(void)
 
 // ============ Common Init ============
 
-static esp_err_t breezybox_init_common(void)
+static esp_err_t breezybox_init_common(const esp_console_cmd_t *extra_cmds,
+                                       size_t extra_count)
 {
     // Force-export symbols for ELF runtime linking
     breezybox_export_symbols();
-    
+
     // Initialize filesystem
     esp_err_t ret = breezybox_vfs_init();
     if (ret != ESP_OK) {
@@ -221,6 +241,12 @@ static esp_err_t breezybox_init_common(void)
     // Register commands
     breezybox_register_commands();
     esp_console_register_help_command();
+
+    // Register caller-supplied commands before the init script runs, so that
+    // init.sh can reference them (e.g. an optional component's `sshd`).
+    for (size_t i = 0; i < extra_count; i++) {
+        esp_console_cmd_register(&extra_cmds[i]);
+    }
 
     // Run init script
     run_init_script();
@@ -265,7 +291,14 @@ static void stdio_repl_task(void *arg)
 
 esp_err_t breezybox_start_stdio(size_t stack_size, uint32_t priority)
 {
-    esp_err_t ret = breezybox_init_common();
+    return breezybox_start_stdio_ex(stack_size, priority, NULL, 0);
+}
+
+esp_err_t breezybox_start_stdio_ex(size_t stack_size, uint32_t priority,
+                                   const esp_console_cmd_t *extra_cmds,
+                                   size_t extra_count)
+{
+    esp_err_t ret = breezybox_init_common(extra_cmds, extra_count);
     if (ret != ESP_OK) return ret;
 
     xTaskCreate(stdio_repl_task, "breezy_repl", stack_size, NULL, priority, NULL);

@@ -6,14 +6,6 @@ dependencies:
   badgeteam/badge-bsp:
     version: "^1.0.0"
 
-  # Virtual terminal. Overridden to the in-tree copy so we can use the new
-  # CONFIG_VTERM_COLS/ROWS knobs (100x30 for this 800x480 panel).
-  # breezybox itself depends on breezy_term; this override applies tree-wide.
-  valdanylchuk/breezy_term:
-    version: "*"
-    # Relative to this manifest (main/): up to the breezybox repo root, then src/.
-    override_path: "../../../src/components/breezy_term"
-
   # --- Networking: radio lives on the C6, reached via esp-hosted ---
   # Same stack the native launcher uses on P4. These satisfy breezybox's
   # esp_wifi / esp_http / lwip requirements at link time and provide the

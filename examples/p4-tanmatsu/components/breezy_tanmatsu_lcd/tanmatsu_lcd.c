@@ -443,6 +443,7 @@ static int gfx_setup_mode(screen_mode_t mode)
     int w, h;
     if (mode == SM_VGA13H)      { w = 320; h = 200; }
     else if (mode == SM_150P)   { w = 256; h = 150; }
+    else if (mode == SM_GBA240) { w = 240; h = 160; }
     else                        return -1;
 
     int sx = s_lw / w, sy = s_lh / h;
@@ -473,7 +474,7 @@ int rgb_display_set_mode(screen_mode_t mode)
 {
     if (mode == s_screen_mode) return 0;
 
-    if (mode == SM_VGA13H || mode == SM_150P) {
+    if (mode == SM_VGA13H || mode == SM_150P || mode == SM_GBA240) {
         if (s_cbs && s_cbs->enter_graphics && s_cbs->enter_graphics() != 0) {
             return -1;
         }
