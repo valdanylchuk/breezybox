@@ -22,6 +22,8 @@ idf_component_register(
         "cmd/du.c"
         "cmd/date.c"
         "cmd/eget.c"
+        "cmd/eget.c"
+        "cmd/httpget.c"
     INCLUDE_DIRS "include"
     REQUIRES console littlefs nvs_flash esp_wifi esp_netif esp_http_server esp_http_client json vfs mbedtls elf_loader zlib breezy_term
 )
