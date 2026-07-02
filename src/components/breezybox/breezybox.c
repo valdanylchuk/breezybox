@@ -205,6 +205,7 @@ esp_err_t breezybox_register_commands(void)
         { .command = "sleep", .help = "Sleep for N seconds",     .hint = "<seconds>", .func = &cmd_sleep },
         { .command = "sh",    .help = "Run script file",         .hint = "<script>",  .func = &cmd_sh    },
         { .command = "eget",  .help = "Download ELF from GitHub", .hint = "<user/repo>", .func = &cmd_eget },
+        { .command = "httpget",  .help = "Download a file to dest", .hint = "url <path/file>", .func = &cmd_httpget },
         { .command = "wifi",  .help = "WiFi commands",           .hint = "<scan|connect|disconnect|status|forget>", .func = &cmd_wifi },
         { .command = "httpd", .help = "HTTP file server",        .hint = "[dir] [-p port]", .func = &cmd_httpd },
     };
